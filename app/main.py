@@ -86,7 +86,8 @@ def ensure_database_features() -> None:
             for column_name, ddl in columns.items():
                 if column_name not in existing_columns:
                     connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
-        connection.exec_driver_sql("UPDATE users SET is_admin = 1 WHERE username = 'admin'")
+        admin_flag_value = "1" if sqlite_mode else "TRUE"
+        connection.exec_driver_sql(f"UPDATE users SET is_admin = {admin_flag_value} WHERE username = 'admin'")
         connection.exec_driver_sql(
             "UPDATE payment_methods SET owner_user_id = (SELECT id FROM users WHERE username = 'admin' LIMIT 1) "
             "WHERE owner_user_id IS NULL"
