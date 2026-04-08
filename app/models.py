@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -23,7 +24,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
-    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     timezone_name: Mapped[str] = mapped_column(String(64), default="America/Caracas")
     subscription_ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -41,8 +42,8 @@ class PaymentMethod(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(80), unique=True)
-    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    notes: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -56,8 +57,8 @@ class Service(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(80), unique=True)
-    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    notes: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    owner_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -72,7 +73,7 @@ class Package(Base):
     service_id: Mapped[int] = mapped_column(ForeignKey("services.id"))
     name: Mapped[str] = mapped_column(String(120))
     usd_price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    bs_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    bs_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -127,7 +128,7 @@ class Sale(Base):
     reference_raw: Mapped[str] = mapped_column(String(120))
     reference_digits: Mapped[str] = mapped_column(String(120), index=True)
     reference_last_6: Mapped[str] = mapped_column(String(6), index=True)
-    reference_last_7: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    reference_last_7: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
     validation_key: Mapped[str] = mapped_column(String(12), index=True)
     validation_digits_used: Mapped[int] = mapped_column(Integer, default=6)
     amount_paid_value: Mapped[Decimal] = mapped_column(Numeric(10, 2))
@@ -136,7 +137,7 @@ class Sale(Base):
     amount_paid_bs: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     expected_total_usd: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     expected_total_bs: Mapped[Decimal] = mapped_column(Numeric(12, 2))
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     payment_method_id: Mapped[int] = mapped_column(ForeignKey("payment_methods.id"))
     operator_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
@@ -169,7 +170,7 @@ class DaysExtensionRequest(Base):
     requested_days: Mapped[int] = mapped_column(Integer, default=0)
     message: Mapped[str] = mapped_column(String(255), default="Necesito extender mi acceso")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    reviewed_by_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     user: Mapped[User] = relationship(back_populates="extension_requests")

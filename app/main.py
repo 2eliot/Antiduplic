@@ -4,7 +4,7 @@ import json
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Annotated
+from typing import Annotated, Optional
 from zoneinfo import ZoneInfo, available_timezones
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
@@ -43,10 +43,10 @@ class SaleItemPayload(BaseModel):
 class CreateSalePayload(BaseModel):
     payment_method_id: int
     reference: str = Field(min_length=1)
-    amount_paid_value: Decimal | None = Field(default=None, gt=0)
-    amount_paid_currency: str | None = Field(default=None, pattern="^(USD|BS)$")
+    amount_paid_value: Optional[Decimal] = Field(default=None, gt=0)
+    amount_paid_currency: Optional[str] = Field(default=None, pattern="^(USD|BS)$")
     force_seven_validation: bool = False
-    notes: str | None = None
+    notes: Optional[str] = None
     items: list[SaleItemPayload] = Field(min_length=1)
 
 
@@ -160,7 +160,7 @@ def local_day_bounds(day_value: date, timezone_name: str) -> tuple[datetime, dat
     return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
 
-def set_payment_method_default(db: Session, selected_id: int, owner_user_id: int | None) -> None:
+def set_payment_method_default(db: Session, selected_id: int, owner_user_id: Optional[int]) -> None:
     statement = select(PaymentMethod)
     if owner_user_id is None:
         statement = statement.where(PaymentMethod.owner_user_id.is_(None))
@@ -171,7 +171,7 @@ def set_payment_method_default(db: Session, selected_id: int, owner_user_id: int
         method.is_default = method.id == selected_id
 
 
-def set_service_default(db: Session, selected_id: int, owner_user_id: int | None) -> None:
+def set_service_default(db: Session, selected_id: int, owner_user_id: Optional[int]) -> None:
     statement = select(Service)
     if owner_user_id is None:
         statement = statement.where(Service.owner_user_id.is_(None))
@@ -312,7 +312,7 @@ def layout_context(request: Request, current_user: User) -> dict:
     }
 
 
-def serialize_catalog(services: list[Service], exchange_rate: Decimal, allowed_package_ids: set[int] | None = None) -> list[dict]:
+def serialize_catalog(services: list[Service], exchange_rate: Decimal, allowed_package_ids: Optional[set[int]] = None) -> list[dict]:
     return [
         {
             "id": service.id,
@@ -363,9 +363,9 @@ def sale_card_payload(sale: Sale) -> dict:
 def render_login_template(
     request: Request,
     *,
-    login_error: str | None = None,
-    register_error: str | None = None,
-    register_values: dict | None = None,
+    login_error: Optional[str] = None,
+    register_error: Optional[str] = None,
+    register_values: Optional[dict] = None,
 ):
     values = register_values or {}
     return templates.TemplateResponse(
@@ -746,10 +746,10 @@ def history_page(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-    q: str | None = None,
-    payment_method_id: str | None = None,
-    service_id: str | None = None,
-    sale_day: str | None = None,
+    q: Optional[str] = None,
+    payment_method_id: Optional[str] = None,
+    service_id: Optional[str] = None,
+    sale_day: Optional[str] = None,
 ):
     setting = get_setting(db)
     since = datetime.now(timezone.utc) - timedelta(days=setting.history_retention_months * 31)

@@ -8,7 +8,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 GIT_REPO_URL="${GIT_REPO_URL:?Debes definir GIT_REPO_URL}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 REQUIRED_PYTHON_MAJOR=3
-REQUIRED_PYTHON_MINOR=10
+REQUIRED_PYTHON_MINOR=9
 
 if command -v sudo >/dev/null 2>&1; then
   SUDO="sudo"
@@ -38,7 +38,7 @@ resolve_python_bin() {
     candidates+=("${PYTHON_BIN}")
   fi
 
-  for candidate in python3.12 python3.11 python3.10 python3; do
+  for candidate in python3.12 python3.11 python3.10 python3.9 python39 python3; do
     if command -v "${candidate}" >/dev/null 2>&1; then
       candidates+=("${candidate}")
     fi
@@ -52,7 +52,7 @@ resolve_python_bin() {
   done
 
   echo "No se encontró Python ${REQUIRED_PYTHON_MAJOR}.${REQUIRED_PYTHON_MINOR}+ en el servidor."
-  echo "Instala python3.10 o python3.11 y luego reintenta exportando PYTHON_BIN=python3.10 o PYTHON_BIN=python3.11."
+  echo "Instala python3.9, python3.10 o python3.11 y luego reintenta exportando PYTHON_BIN=python3.9, PYTHON_BIN=python39, PYTHON_BIN=python3.10 o PYTHON_BIN=python3.11."
   exit 1
 }
 
@@ -66,6 +66,8 @@ install_packages() {
   if command -v dnf >/dev/null 2>&1; then
     ${SUDO} dnf install -y git podman podman-compose curl python3.11 python3.11-pip || \
       ${SUDO} dnf install -y git podman podman-compose curl python3.10 python3.10-pip || \
+      ${SUDO} dnf install -y git podman podman-compose curl python3.9 python3.9-pip || \
+      ${SUDO} dnf install -y git podman podman-compose curl python39 python39-pip || \
       ${SUDO} dnf install -y git python3 python3-pip python3-virtualenv podman podman-compose curl
     return
   fi

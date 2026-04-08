@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -19,7 +20,7 @@ def build_suffix(value: str, preferred_length: int) -> str:
     return value[-usable_length:] if usable_length else ""
 
 
-def current_month_bucket(timezone_name: str, at: datetime | None = None) -> date:
+def current_month_bucket(timezone_name: str, at: Optional[datetime] = None) -> date:
     local_now = (at or datetime.now(ZoneInfo(timezone_name))).astimezone(ZoneInfo(timezone_name))
     return date(local_now.year, local_now.month, 1)
 
