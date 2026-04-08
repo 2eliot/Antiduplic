@@ -55,7 +55,10 @@ Levantar Postgres y servicio:
 
 ```bash
 cd /opt/antiduplic
-docker compose up -d
+export APP_DIR=/opt/antiduplic
+export APP_USER=root
+export APP_GROUP=root
+bash deploy/compose_up.sh
 bash deploy/install_service.sh
 ```
 
@@ -63,7 +66,7 @@ Verificación:
 
 ```bash
 systemctl status antiduplic --no-pager
-docker compose ps
+docker compose ps || podman ps
 ss -ltnp | grep ':8000\|:5432'
 curl -I http://127.0.0.1:8000
 ```
@@ -71,5 +74,5 @@ curl -I http://127.0.0.1:8000
 Actualización posterior:
 
 ```bash
-ssh SSH_USER@159.198.45.30 "bash /opt/antiduplic/deploy/update_vps.sh"
+ssh SSH_USER@159.198.45.30 "export APP_DIR=/opt/antiduplic; export APP_USER=root; export APP_GROUP=root; export GIT_BRANCH=main; bash /opt/antiduplic/deploy/update_vps.sh"
 ```

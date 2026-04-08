@@ -8,33 +8,73 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 GIT_REPO_URL="${GIT_REPO_URL:?Debes definir GIT_REPO_URL}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 
-sudo apt-get update
-sudo apt-get install -y git ${PYTHON_BIN} ${PYTHON_BIN}-venv python3-pip docker.io docker-compose-plugin
+if command -v sudo >/dev/null 2>&1; then
+  SUDO="sudo"
+else
+  SUDO=""
+fi
+
+run_as_app_user() {
+  if [ "$(id -un)" = "${APP_USER}" ]; then
+    "$@"
+  else
+    ${SUDO} -u "${APP_USER}" "$@"
+  fi
+}
+
+install_packages() {
+  if command -v apt-get >/dev/null 2>&1; then
+    ${SUDO} apt-get update
+    ${SUDO} apt-get install -y git ${PYTHON_BIN} ${PYTHON_BIN}-venv python3-pip docker.io docker-compose-plugin curl
+    return
+  fi
+
+  if command -v dnf >/dev/null 2>&1; then
+    ${SUDO} dnf install -y git python3 python3-pip python3-virtualenv podman podman-compose curl
+    return
+  fi
+
+  if command -v yum >/dev/null 2>&1; then
+    ${SUDO} yum install -y git python3 python3-pip python3-virtualenv podman curl
+    ${SUDO} python3 -m pip install podman-compose
+    return
+  fi
+
+  echo "No se detectó un gestor de paquetes soportado (apt, dnf, yum)."
+  exit 1
+}
+
+install_packages
 
 if [ ! -d "${APP_DIR}" ]; then
-  sudo mkdir -p "${APP_DIR}"
+  ${SUDO} mkdir -p "${APP_DIR}"
 fi
 
-sudo chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
+${SUDO} chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
 
 if [ ! -d "${APP_DIR}/.git" ]; then
-  sudo -u "${APP_USER}" git clone -b "${GIT_BRANCH}" "${GIT_REPO_URL}" "${APP_DIR}"
+  run_as_app_user git clone -b "${GIT_BRANCH}" "${GIT_REPO_URL}" "${APP_DIR}"
 else
-  sudo -u "${APP_USER}" git -C "${APP_DIR}" fetch origin
-  sudo -u "${APP_USER}" git -C "${APP_DIR}" checkout "${GIT_BRANCH}"
-  sudo -u "${APP_USER}" git -C "${APP_DIR}" pull --ff-only origin "${GIT_BRANCH}"
+  run_as_app_user git -C "${APP_DIR}" fetch origin
+  run_as_app_user git -C "${APP_DIR}" checkout "${GIT_BRANCH}"
+  run_as_app_user git -C "${APP_DIR}" pull --ff-only origin "${GIT_BRANCH}"
 fi
 
-sudo -u "${APP_USER}" ${PYTHON_BIN} -m venv "${APP_DIR}/.venv"
-sudo -u "${APP_USER}" "${APP_DIR}/.venv/bin/pip" install --upgrade pip
-sudo -u "${APP_USER}" "${APP_DIR}/.venv/bin/pip" install -r "${APP_DIR}/requirements.txt"
+run_as_app_user ${PYTHON_BIN} -m venv "${APP_DIR}/.venv"
+run_as_app_user "${APP_DIR}/.venv/bin/pip" install --upgrade pip
+run_as_app_user "${APP_DIR}/.venv/bin/pip" install -r "${APP_DIR}/requirements.txt"
 
 if [ ! -f "${APP_DIR}/.env" ]; then
-  sudo -u "${APP_USER}" cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"
+  run_as_app_user cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"
   echo "Se creó ${APP_DIR}/.env. Debes editarlo antes de levantar el servicio."
 fi
 
-sudo systemctl enable docker
-sudo systemctl start docker
+if systemctl list-unit-files | grep -q '^docker.service'; then
+  ${SUDO} systemctl enable docker
+  ${SUDO} systemctl start docker
+elif systemctl list-unit-files | grep -q '^podman.service'; then
+  ${SUDO} systemctl enable podman
+  ${SUDO} systemctl start podman || true
+fi
 
 echo "Bootstrap completado. Edita ${APP_DIR}/.env y luego ejecuta deploy/install_service.sh"
