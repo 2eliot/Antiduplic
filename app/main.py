@@ -407,10 +407,13 @@ def login_page(request: Request):
 def login(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
-    email: str = Form(...),
+    email: Optional[str] = Form(None),
+    username: Optional[str] = Form(None),
     password: str = Form(...),
 ):
-    normalized_email = email.strip().lower()
+    normalized_email = (email or username or "").strip().lower()
+    if not normalized_email:
+        return render_login_template(request, login_error="Debes indicar tu correo.")
     user = db.scalar(select(User).where(func.lower(User.email) == normalized_email, User.is_active.is_(True)))
     if not user or not verify_password(password, user.password_hash):
         return render_login_template(request, login_error="Credenciales inválidas.", login_email=normalized_email)
