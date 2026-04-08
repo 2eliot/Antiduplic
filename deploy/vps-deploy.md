@@ -9,6 +9,7 @@ Variables que debes decidir antes de ejecutar:
 - `SSH_USER`: usuario con acceso SSH al VPS.
 - `GIT_REPO_URL`: URL del repo GitHub de Antiduplic.
 - `GIT_BRANCH`: rama a desplegar, por ejemplo `main`.
+- `PYTHON_BIN`: usa `python3.11` o `python3.10` si `python3` en el VPS es más viejo que 3.10.
 
 Comandos desde tu máquina local:
 
@@ -17,7 +18,8 @@ ssh SSH_USER@159.198.45.30 "mkdir -p /opt/antiduplic"
 scp -r deploy SSH_USER@159.198.45.30:/tmp/antiduplic-deploy
 ssh SSH_USER@159.198.45.30 "cp -r /tmp/antiduplic-deploy/* /opt/antiduplic/deploy || true"
 ssh SSH_USER@159.198.45.30 "chmod +x /opt/antiduplic/deploy/*.sh"
-ssh SSH_USER@159.198.45.30 "export GIT_REPO_URL='https://github.com/2eliot/Antiduplic.git'; export GIT_BRANCH='main'; bash /opt/antiduplic/deploy/bootstrap_vps.sh"
+ssh SSH_USER@159.198.45.30 "python3 --version || true; python3.11 --version || true; python3.10 --version || true"
+ssh SSH_USER@159.198.45.30 "export GIT_REPO_URL='https://github.com/2eliot/Antiduplic.git'; export GIT_BRANCH='main'; export PYTHON_BIN='python3.11'; bash /opt/antiduplic/deploy/bootstrap_vps.sh"
 ```
 
 Editar variables sensibles en el VPS:
@@ -58,6 +60,7 @@ cd /opt/antiduplic
 export APP_DIR=/opt/antiduplic
 export APP_USER=root
 export APP_GROUP=root
+export PYTHON_BIN=python3.11
 bash deploy/compose_up.sh
 bash deploy/install_service.sh
 ```

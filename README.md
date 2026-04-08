@@ -10,6 +10,11 @@ Aplicación web en Python para registrar ventas y bloquear pagos duplicados por 
 - PostgreSQL para producción
 - Jinja2 + JavaScript vanilla
 
+## Requisito de Python
+
+- Python 3.10 o superior.
+- En VPS Linux antiguos, `python3` puede apuntar a 3.6 o 3.9; en ese caso instala `python3.10` o `python3.11` y exporta `PYTHON_BIN=python3.10` o `PYTHON_BIN=python3.11` antes de correr `deploy/bootstrap_vps.sh`.
+
 ## Funcionalidades implementadas
 
 - Inicio de sesión con sesión de usuario.
@@ -90,11 +95,12 @@ Flujo recomendado:
 
 1. Crear usuario y carpeta del proyecto en el VPS, por ejemplo `/opt/antiduplic`.
 2. Clonar el repo y crear el entorno virtual.
-3. Copiar `.env.example` a `.env` y reemplazar todos los placeholders.
-4. Instalar dependencias con `pip install -r requirements.txt`.
-5. Si usarás PostgreSQL en Docker, completar las variables `POSTGRES_*` y ejecutar `docker compose up -d`.
-6. Ajustar `deploy/antiduplic.service` si tu usuario o ruta difieren.
-7. Copiar la unidad a `/etc/systemd/system/antiduplic.service` y habilitarla.
+3. Confirmar que el VPS tenga Python 3.10+.
+4. Copiar `.env.example` a `.env` y reemplazar todos los placeholders.
+5. Instalar dependencias con `pip install -r requirements.txt`.
+6. Si usarás PostgreSQL en Docker, completar las variables `POSTGRES_*` y ejecutar `docker compose up -d`.
+7. Ajustar `deploy/antiduplic.service` si tu usuario o ruta difieren.
+8. Copiar la unidad a `/etc/systemd/system/antiduplic.service` y habilitarla.
 
 Recomendaciones de seguridad para VPS:
 
