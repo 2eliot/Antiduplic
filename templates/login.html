@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="auth-card">
+    <div class="auth-card__hero">
+        <p class="eyebrow">Acceso privado</p>
+        <h2>Antiduplic</h2>
+        <p>Una entrada más limpia y formal para operadores. Inicia sesión o registra una cuenta desde un único panel con estilo ejecutivo.</p>
+    </div>
+
+    <div class="auth-stack auth-stack--suits" data-auth-root data-default-tab="{{ 'register' if register_error else 'login' }}">
+        <div class="auth-switcher" role="tablist" aria-label="Acceso">
+            <button type="button" class="auth-switcher__tab is-active" data-auth-tab="login">Iniciar sesion</button>
+            <button type="button" class="auth-switcher__tab" data-auth-tab="register">Registrarse</button>
+        </div>
+
+        <form method="post" action="/login" class="panel form-stack auth-panel is-active" data-auth-panel="login">
+            <div class="panel-heading-heavy">
+                <h3>INICIAR SESION</h3>
+                <span class="soft-chip">MIEMBRO</span>
+            </div>
+            <div>
+                <label for="username">Usuario</label>
+                <input id="username" name="username" type="text" required>
+            </div>
+            <div>
+                <label for="password">Contrasena</label>
+                <input id="password" name="password" type="password" required>
+            </div>
+            {% if error %}
+            <div class="alert alert--error">{{ error }}</div>
+            {% endif %}
+            <button type="submit" class="primary-button full-width">Entrar al panel</button>
+        </form>
+
+        <form method="post" action="/register" class="panel form-stack auth-panel" data-auth-panel="register">
+            <div class="panel-heading-heavy">
+                <h3>CREAR USUARIO</h3>
+                <span class="soft-chip">NUEVO</span>
+            </div>
+            <div>
+                <label for="register_full_name">Nombre</label>
+                <input id="register_full_name" name="full_name" type="text" value="{{ register_values.full_name }}" required>
+            </div>
+            <div>
+                <label for="register_username">Usuario</label>
+                <input id="register_username" name="username" type="text" value="{{ register_values.username }}" required>
+            </div>
+            <div>
+                <label for="register_email">Correo</label>
+                <input id="register_email" name="email" type="email" value="{{ register_values.email }}" required>
+            </div>
+            <div>
+                <label for="register_timezone_name">Zona horaria</label>
+                <select id="register_timezone_name" name="timezone_name">
+                    {% for timezone_name in timezone_options %}
+                    <option value="{{ timezone_name }}"{% if timezone_name == register_values.timezone_name %} selected{% endif %}>{{ timezone_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="two-column">
+                <div>
+                    <label for="register_password">Contrasena</label>
+                    <input id="register_password" name="password" type="password" minlength="6" required>
+                </div>
+                <div>
+                    <label for="register_confirm_password">Confirmar</label>
+                    <input id="register_confirm_password" name="confirm_password" type="password" minlength="6" required>
+                </div>
+            </div>
+            {% if register_error %}
+            <div class="alert alert--error">{{ register_error }}</div>
+            {% endif %}
+            <p class="helper-text">Las cuentas nuevas quedan listas para ser configuradas por el administrador o por su propio catálogo cuando tengan días activos.</p>
+            <button type="submit" class="secondary-button full-width">Crear cuenta y entrar</button>
+        </form>
+    </div>
+</section>
+{% endblock %}

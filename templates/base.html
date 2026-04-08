@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="shell{% if not current_user %} shell--auth{% endif %}">
+        {% if current_user %}
+        <aside class="sidebar" data-sidebar>
+            <div class="sidebar__top">
+                <a href="/dashboard" class="brandmark">
+                    <span>Anti</span><strong>duplic</strong>
+                </a>
+                <button class="icon-button icon-button--ghost" type="button" data-sidebar-toggle aria-label="Contraer menu">‹</button>
+            </div>
+
+            <nav class="sidebar__nav">
+                <a href="/dashboard" class="nav-pill{% if request.url.path == '/dashboard' %} is-active{% endif %}"><span class="nav-pill__icon">◫</span><span>dashboard</span></a>
+                <a href="/profile" class="nav-pill{% if request.url.path == '/profile' %} is-active{% endif %}"><span class="nav-pill__icon">◌</span><span>Mi Perfil</span></a>
+                {% if can_manage_catalog %}
+                <a href="/payment-methods" class="nav-pill{% if request.url.path == '/payment-methods' %} is-active{% endif %}"><span class="nav-pill__icon">▭</span><span>Metodos de Pago</span></a>
+                <a href="/services" class="nav-pill{% if request.url.path == '/services' %} is-active{% endif %}"><span class="nav-pill__icon">⌘</span><span>Servicios y paquetes</span></a>
+                {% endif %}
+                <a href="/history" class="nav-pill{% if request.url.path == '/history' %} is-active{% endif %}"><span class="nav-pill__icon">↺</span><span>Historico de Operaciones</span></a>
+                <a href="/wipe-data" class="nav-pill{% if request.url.path == '/wipe-data' %} is-active{% endif %}"><span class="nav-pill__icon">⌦</span><span>Borrado de Datos</span></a>
+                {% if current_user.is_admin %}
+                <a href="/admin" class="nav-pill{% if request.url.path == '/admin' %} is-active{% endif %}"><span class="nav-pill__icon">★</span><span>Panel Admin</span></a>
+                {% endif %}
+                <a href="/guide" class="nav-pill{% if request.url.path == '/guide' %} is-active{% endif %}"><span class="nav-pill__icon">?</span><span>Guia de Uso</span></a>
+            </nav>
+
+            <form method="post" action="/logout" class="sidebar__logout">
+                <button type="submit" class="logout-link"><span>↪</span><span>CERRAR SESION</span></button>
+            </form>
+        </aside>
+        {% endif %}
+
+        <main class="content{% if not current_user %} content--auth{% endif %}">
+            {% if current_user %}
+            <header class="topbar">
+                <div class="topbar__status">
+                    <span class="topbar__dot"></span>
+                    <span>{{ user_card.username }}</span>
+                </div>
+                <div class="topbar__identity">
+                    <strong>{{ app_name }}</strong>
+                    <div class="topbar__badge">{{ user_card.days_left }}</div>
+                </div>
+            </header>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script src="/static/app.js" defer></script>
+</body>
+</html>

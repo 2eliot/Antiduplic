@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="workspace-title workspace-title--row">
+    <h2>REGISTROS RECIENTES</h2>
+    <a class="ghost-action" href="/history">LIMPIAR FILTROS</a>
+</section>
+
+<section class="workspace-panel form-stack">
+    <form class="filters-line" method="get" action="/history">
+        <span class="helper-text helper-text--strong">ZONA HORARIA: {{ timezone_name }}</span>
+        <div class="filters-grid">
+            <input type="text" name="q" value="{{ filters.q }}" placeholder="BUSCAR REFERENCIA O EMAIL...">
+            <select name="payment_method_id">
+                <option value="">TODOS LOS METODOS</option>
+                {% for method in payment_methods %}
+                <option value="{{ method.id }}"{% if filters.payment_method_id == method.id %} selected{% endif %}>{{ method.name }}</option>
+                {% endfor %}
+            </select>
+            <select name="service_id">
+                <option value="">TODOS LOS SERVICIOS</option>
+                {% for service in services %}
+                <option value="{{ service.id }}"{% if filters.service_id == service.id %} selected{% endif %}>{{ service.name }}</option>
+                {% endfor %}
+            </select>
+            <input type="date" name="sale_day" value="{{ filters.sale_day }}">
+        </div>
+        <button class="secondary-button" type="submit">Aplicar filtros</button>
+    </form>
+
+    <div class="history-table">
+        <div class="history-table__head">
+            <span>USUARIO</span>
+            <span>METODO</span>
+            <span>REF (6)</span>
+            <span>MONTO</span>
+            <span>PLATAFORMA</span>
+            <span>FECHA</span>
+            <span>ACCIONES</span>
+        </div>
+        <div class="history-table__body">
+            {% for sale in sales %}
+            <article class="history-row">
+                <span>{{ sale['operator_username'] }}<br><small>{{ sale['operator_email'] }}</small></span>
+                <span>{{ sale['payment_method'] }}</span>
+                <span>{{ sale['reference'][-6:] }}</span>
+                <span>USD {{ sale['amount_paid_usd'] }}</span>
+                <span>{{ sale['primary_service'] }}</span>
+                <span>{{ sale['created_at'] }}</span>
+                <span>{{ sale['validation_digits_used'] }}d</span>
+            </article>
+            {% else %}
+            <div class="empty-state empty-state--centered">No hay registros para este filtro.</div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}

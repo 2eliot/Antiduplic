@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="workspace-title workspace-title--row">
+    <h2>BORRADO DE DATOS</h2>
+    <span class="soft-chip soft-chip--danger">ZONA DE PELIGRO</span>
+</section>
+
+<section class="workspace-panel workspace-panel--inline workspace-panel--wide">
+    <div class="service-card__left">
+        <div class="entity-card__icon">◌</div>
+        <div>
+            <strong>MIS REGISTROS</strong>
+            <p class="helper-text">{{ sales_count }} VENTAS</p>
+        </div>
+    </div>
+    <a class="icon-button" href="/wipe-data">⟳</a>
+</section>
+
+<div class="cards-grid cards-grid--two">
+    <form method="post" action="/wipe-data/range" class="workspace-panel form-stack">
+        <div class="panel-heading-heavy">
+            <h3>ELIMINAR POR RANGO</h3>
+        </div>
+        <p class="helper-text">Elimina tus registros dentro de un periodo especifico.</p>
+        <small class="helper-text helper-text--strong">ZONA HORARIA: {{ timezone_name }}</small>
+        <div class="two-column">
+            <div>
+                <label>DESDE</label>
+                <input type="date" name="start_date" required>
+            </div>
+            <div>
+                <label>HASTA</label>
+                <input type="date" name="end_date" required>
+            </div>
+        </div>
+        <button class="secondary-button full-width" type="submit">EJECUTAR LIMPIEZA</button>
+    </form>
+
+    <form method="post" action="/wipe-data/reset" class="workspace-panel form-stack">
+        <div class="panel-heading-heavy">
+            <h3>RESETEAR SISTEMA</h3>
+        </div>
+        <p class="helper-text">Borra TODOS tus registros. Esta accion no se puede deshacer.</p>
+        <label>ESCRIBE "BORRAR TODO" PARA CONFIRMAR</label>
+        <input type="text" name="confirmation_text" placeholder="BORRAR TODO" required>
+        <button class="primary-button full-width" type="submit">FORMATEAR BASE DE DATOS</button>
+    </form>
+</div>
+
+<section class="workspace-panel warning-panel">
+    <strong>AVISO DE SEGURIDAD</strong>
+    <p>Las operaciones de borrado son definitivas. Una vez eliminados los datos, no podran ser recuperados. El sistema de prevención de duplicados dejará de reconocer las referencias eliminadas, permitiendo que se vuelvan a registrar.</p>
+</section>
+{% endblock %}

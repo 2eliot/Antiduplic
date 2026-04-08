@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="workspace-title">
+    <h2>dashboard</h2>
+</section>
+
+{% if not can_operate %}
+<section class="workspace-panel form-stack empty-access-panel">
+    <div class="panel-heading-heavy">
+        <h3>CUENTA PENDIENTE DE CONFIGURACION</h3>
+        <span class="soft-chip">SIN ACCESO</span>
+    </div>
+    {% if days_left <= 0 %}
+    <p class="helper-text">Tu cuenta no tiene días activos. Aunque el admin te asigne métodos o paquetes, no podrás operar hasta que también apruebe días para tu usuario.</p>
+    {% else %}
+    <p class="helper-text">Tu cuenta todavía no tiene métodos de pago o paquetes disponibles. Puedes crearlos desde tus paneles de catálogo, o usar los que te asigne un administrador.</p>
+    {% endif %}
+    <p class="helper-text">Toda tu actividad queda limitada a tu propia cuenta: historial, ventas y limpieza de datos solo afectan tu usuario.</p>
+</section>
+{% endif %}
+
+<div class="reference-layout" data-dashboard-root data-exchange-rate="{{ exchange_rate }}">
+    <section class="workspace-panel workspace-panel--form form-stack compact-panel">
+        <div class="step-block">
+            <div class="step-title"><span class="step-number">1</span><h3>Elige metodo de pago</h3></div>
+            <div class="chip-grid chip-grid--dashboard" data-select-group="payment-methods">
+                {% for method in payment_methods %}
+                <button
+                    type="button"
+                    class="choice-chip choice-chip--danger{% if method.is_default %} is-selected{% endif %}"
+                    data-value="{{ method.id }}"
+                    data-role="choice-button"
+                >{{ method.name }}</button>
+                {% else %}
+                <p class="empty-state">No tienes métodos de pago asignados.</p>
+                {% endfor %}
+            </div>
+            <input type="hidden" id="payment_method_id" value="{{ payment_methods[0].id if payment_methods else '' }}">
+        </div>
+
+        <div class="step-block">
+            <div class="step-title"><span class="step-number">2</span><h3>Coloca numero de pago</h3></div>
+            <div class="reference-shell">
+                <input id="reference_input" class="reference-input" type="text" placeholder="Ingresa la referencia...">
+                <span class="reference-symbol">#</span>
+            </div>
+            <small class="helper-text">Ultimos 6: <span data-last-six>------</span></small>
+        </div>
+
+        <div class="step-block">
+            <div class="step-title"><span class="step-number">3</span><h3>Servicio</h3></div>
+            <div class="chip-grid chip-grid--dashboard" data-select-group="services">
+                {% for service in services %}
+                <button
+                    type="button"
+                    class="choice-chip choice-chip--danger{% if service.is_default %} is-selected{% endif %}"
+                    data-value="{{ service.id }}"
+                    data-role="choice-button"
+                >{{ loop.index }}. {{ service.name }}</button>
+                {% else %}
+                <p class="empty-state">No tienes servicios o paquetes asignados.</p>
+                {% endfor %}
+            </div>
+            <input type="hidden" id="service_id" value="{{ services[0].id if services else '' }}">
+        </div>
+
+        <div class="step-block">
+            <div class="step-title"><span class="step-number">4</span><h3>Paquetes</h3></div>
+            <div id="package_list" class="stack-list"></div>
+        </div>
+
+        <div class="step-block">
+            <label for="sale_notes">Notas</label>
+            <textarea id="sale_notes" rows="2" placeholder="Opcional"></textarea>
+            <small class="helper-text">El monto se toma automaticamente del total del pedido.</small>
+        </div>
+
+        <div id="sale_feedback" class="alert is-hidden"></div>
+        <button type="button" class="primary-button primary-button--wide" id="register_sale_button"{% if not can_operate %} disabled{% endif %}>REGISTRAR VENTA <span>›</span></button>
+    </section>
+
+    <section class="stack-column workspace-column">
+        <article class="workspace-panel">
+            <div class="panel-heading-heavy">
+                <h3>Resumen del pedido</h3>
+                <span class="soft-chip">Tasa Bs {{ exchange_rate }}</span>
+            </div>
+            <div id="cart_items" class="stack-list"></div>
+            <div class="summary-grid summary-grid--danger">
+                <div>
+                    <span>Total USD</span>
+                    <strong id="total_usd">0.00</strong>
+                </div>
+                <div>
+                    <span>Total Bs</span>
+                    <strong id="total_bs">0.00</strong>
+                </div>
+            </div>
+        </article>
+
+        <article class="workspace-panel">
+            <div class="panel-heading-heavy">
+                <h3>Registros recientes</h3>
+                <span class="soft-chip">{{ timezone_name }}</span>
+            </div>
+            <div class="history-stack">
+                {% for sale in recent_sales %}
+                <article class="history-card">
+                    <div class="history-card__top">
+                        <strong>#{{ sale['id'] }}</strong>
+                        <span>{{ sale['created_at'] }}</span>
+                    </div>
+                    <p>{{ sale['payment_method'] }} · Ref {{ sale['reference'] }}</p>
+                    <ul class="inline-list">
+                        {% for item in sale['items'] %}
+                        <li>{{ item['service'] }} / {{ item['package'] }}</li>
+                        {% endfor %}
+                    </ul>
+                    <div class="history-card__totals">USD {{ sale['amount_paid_usd'] }} · Bs {{ sale['amount_paid_bs'] }}</div>
+                </article>
+                {% else %}
+                <p class="empty-state">Todavia no hay ventas registradas.</p>
+                {% endfor %}
+            </div>
+        </article>
+    </section>
+</div>
+
+<div id="duplicate_modal" class="modal-backdrop is-hidden">
+    <div class="duplicate-modal">
+        <div class="duplicate-modal__icon">!</div>
+        <h3>¡ATENCION: REFERENCIA DUPLICADA!</h3>
+        <p class="duplicate-modal__subtitle">ALERTA DE PAGO DUPLICADO (CRITICO)</p>
+        <div class="duplicate-modal__details" data-duplicate-content></div>
+        <p class="duplicate-modal__footer">El registro actual ha sido bloqueado para evitar duplicidad de saldo.</p>
+        <div class="duplicate-modal__actions">
+            <button type="button" class="secondary-button secondary-button--gold is-hidden" id="force_seven_button">Validar con 7 digitos</button>
+            <button type="button" class="secondary-button secondary-button--gold" id="close_duplicate_modal">ENTENDIDO</button>
+        </div>
+    </div>
+</div>
+
+<script id="catalog-data" type="application/json">{{ catalog_json | safe }}</script>
+{% endblock %}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Antiduplic FastAPI service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/antiduplic
+EnvironmentFile=/opt/antiduplic/.env
+ExecStart=/opt/antiduplic/.venv/bin/gunicorn -c /opt/antiduplic/deploy/gunicorn.conf.py app.main:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

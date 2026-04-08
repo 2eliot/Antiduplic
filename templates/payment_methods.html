@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="workspace-title workspace-title--row">
+    <h2>MÉTODOS DE PAGO</h2>
+    <span class="soft-chip">CRUD ACTIVO</span>
+</section>
+
+<section class="workspace-panel form-stack">
+    <div class="panel-heading-heavy">
+        <h3>NUEVO MÉTODO</h3>
+    </div>
+    <form method="post" action="/payment-methods" class="entity-form-grid">
+        <input name="name" type="text" placeholder="Nombre" required>
+        <input name="notes" type="text" placeholder="Notas o uso recomendado">
+        <input name="display_order" type="number" min="0" value="0" required>
+        <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"> Predeterminado</label>
+        <button class="primary-button primary-button--compact" type="submit">Guardar método</button>
+    </form>
+</section>
+
+<section class="cards-grid cards-grid--two cards-grid--stretch">
+    {% for method in payment_methods %}
+    <article class="workspace-panel entity-card entity-card--stack">
+        <div class="service-card__left">
+            <div class="entity-card__icon">▭</div>
+            <div>
+                <h3>{{ method.name }}</h3>
+                <p>{{ method.notes or 'Sin notas' }}</p>
+            </div>
+        </div>
+        <div class="tag-row">
+            {% if method.is_default %}<span class="tag">Predeterminado</span>{% endif %}
+            <span class="tag">Orden {{ method.display_order }}</span>
+            <span class="tag">{{ 'Activo' if method.is_active else 'Inactivo' }}</span>
+        </div>
+        <form method="post" action="/payment-methods/{{ method.id }}/update" class="form-stack">
+            <div class="entity-form-grid">
+                <input name="name" type="text" value="{{ method.name }}" required>
+                <input name="notes" type="text" value="{{ method.notes or '' }}" placeholder="Notas">
+                <input name="display_order" type="number" min="0" value="{{ method.display_order }}" required>
+                <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"{% if method.is_default %} checked{% endif %}> Predeterminado</label>
+            </div>
+            <div class="table-actions">
+                <button class="secondary-button" type="submit">Actualizar</button>
+            </div>
+        </form>
+        <form method="post" action="/payment-methods/{{ method.id }}/toggle">
+            <button class="ghost-action" type="submit">{{ 'Desactivar' if method.is_active else 'Reactivar' }}</button>
+        </form>
+    </article>
+    {% endfor %}
+</section>
+{% endblock %}

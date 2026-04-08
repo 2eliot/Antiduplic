@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="workspace-title workspace-title--row">
+    <h2>MI PERFIL</h2>
+    <span class="soft-chip">CUENTA USUARIO</span>
+</section>
+
+<div class="profile-page">
+    <section class="workspace-panel form-stack">
+        <div class="panel-heading-heavy">
+            <h3>INFORMACION PERSONAL</h3>
+        </div>
+        <div class="profile-grid">
+            <div class="profile-avatar-card">
+                <div class="profile-avatar-circle">{{ days_left }}</div>
+                <label for="avatar_url">URL DE FOTO DE PERFIL</label>
+                <input id="avatar_url" name="avatar_url" type="url" form="profile_form" value="{{ current_user.avatar_url or '' }}" placeholder="https://ejemplo.com/foto.jpg">
+            </div>
+
+            <form method="post" action="/profile" class="form-stack" id="profile_form">
+                <div>
+                    <label for="full_name">NOMBRE DE USUARIO</label>
+                    <input id="full_name" name="full_name" type="text" value="{{ current_user.full_name }}" required>
+                </div>
+                <div>
+                    <label for="timezone_name">ZONA HORARIA</label>
+                    <select id="timezone_name" name="timezone_name">
+                        {% for timezone_name in timezone_options %}
+                        <option value="{{ timezone_name }}"{% if timezone_name == current_user.timezone_name %} selected{% endif %}>{{ timezone_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="profile_current_password">CONTRASENA ACTUAL</label>
+                    <input id="profile_current_password" name="current_password" type="password" required>
+                </div>
+                {% if profile_error %}
+                <div class="alert alert--error">{{ profile_error }}</div>
+                {% endif %}
+                <button type="submit" class="primary-button full-width">GUARDAR CAMBIOS DE PERFIL</button>
+            </form>
+        </div>
+    </section>
+
+    <div class="profile-bottom-grid">
+        <section class="workspace-panel form-stack">
+            <div class="panel-heading-heavy">
+                <h3>CORREO ELECTRONICO</h3>
+            </div>
+            <label for="email">DIRECCION DE EMAIL</label>
+            <input id="email" name="email" type="email" form="profile_form" value="{{ current_user.email }}" required>
+            <button type="submit" form="profile_form" class="secondary-button full-width">ACTUALIZAR EMAIL</button>
+            <small class="helper-text">* El cambio de email requiere tu contrasena actual.</small>
+        </section>
+
+        <form method="post" action="/profile/password" class="workspace-panel form-stack">
+            <div class="panel-heading-heavy">
+                <h3>SEGURIDAD</h3>
+            </div>
+            <div>
+                <label for="current_password">CONTRASENA ACTUAL</label>
+                <input id="current_password" name="current_password" type="password" required>
+            </div>
+            <div>
+                <label for="new_password">NUEVA CONTRASENA</label>
+                <input id="new_password" name="new_password" type="password" minlength="6" placeholder="Minimo 6 caracteres" required>
+            </div>
+            <button type="submit" class="primary-button full-width">ACTUALIZAR CONTRASENA</button>
+        </form>
+    </div>
+
+    <form method="post" action="/profile/request-days" class="workspace-panel form-stack">
+        <div class="panel-heading-heavy">
+            <h3>SOLICITAR DIAS AL ADMIN</h3>
+        </div>
+        <div>
+            <strong>{{ days_left }} dias disponibles</strong>
+            <p class="helper-text">{{ support_contact }}</p>
+        </div>
+        <div class="two-column">
+            <div>
+                <label for="requested_days">DIAS SOLICITADOS</label>
+                <input id="requested_days" name="requested_days" type="number" min="1" step="1" value="7" required>
+            </div>
+            <div>
+                <label for="request_message">MENSAJE</label>
+                <input id="request_message" name="message" type="text" value="Necesito extender mi acceso">
+            </div>
+        </div>
+        {% if latest_request %}
+        <div class="alert alert--success">Ultima solicitud: {{ latest_request.requested_days }} dias · {{ latest_request.status }}</div>
+        {% endif %}
+        <button type="submit" class="secondary-button">ENVIAR SOLICITUD</button>
+    </form>
+</div>
+{% endblock %}

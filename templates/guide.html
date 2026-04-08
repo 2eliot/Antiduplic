@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="workspace-title workspace-title--row">
+    <h2>GUÍA DE USO</h2>
+    <span class="soft-chip">OPERACION BASICA</span>
+</section>
+
+<section class="guide-grid">
+    <article class="workspace-panel">
+        <div class="panel-heading-heavy">
+            <h3>1. REGISTRAR UNA VENTA</h3>
+        </div>
+        <p class="helper-text">Selecciona método, escribe la referencia, arma el carrito y registra el pago. Si la referencia existe en el mismo mes para ese método, el sistema la bloquea y solo permite continuar con 7 dígitos cuando aplica.</p>
+    </article>
+    <article class="workspace-panel">
+        <div class="panel-heading-heavy">
+            <h3>2. REVISAR HISTORIAL</h3>
+        </div>
+        <p class="helper-text">Usa filtros por referencia, email, método, servicio y día para validar operaciones recientes guardadas dentro del período de retención.</p>
+    </article>
+    <article class="workspace-panel">
+        <div class="panel-heading-heavy">
+            <h3>3. MANTENER CATÁLOGO</h3>
+        </div>
+        <p class="helper-text">En métodos y servicios puedes crear, editar o desactivar opciones. Los paquetes aceptan precios en USD o en bolívares.</p>
+    </article>
+    <article class="workspace-panel">
+        <div class="panel-heading-heavy">
+            <h3>4. ADMINISTRAR USUARIOS</h3>
+        </div>
+        <p class="helper-text">Desde el panel admin puedes ajustar días de membresía, revisar solicitudes, actualizar tasa de cambio y ver ventas del día y por paquete.</p>
+    </article>
+</section>
+{% endblock %}
