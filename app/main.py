@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from sqlalchemy import inspect, or_, select
+from sqlalchemy import func, inspect, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 from starlette.middleware.sessions import SessionMiddleware
@@ -21,7 +21,7 @@ from app.config import settings
 from app.database import SessionLocal, engine, get_db
 from app.models import AppSetting, Base, DaysExtensionRequest, Package, PaymentMethod, Sale, SaleItem, Service, User
 from app.security import hash_password, verify_password
-from app.seed import seed_database
+from app.seed import ensure_initial_admin, seed_database
 from app.services.duplicates import build_suffix, check_duplicate_reference, current_month_bucket, extract_digits
 
 
@@ -86,16 +86,6 @@ def ensure_database_features() -> None:
             for column_name, ddl in columns.items():
                 if column_name not in existing_columns:
                     connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
-        admin_flag_value = "1" if sqlite_mode else "TRUE"
-        connection.exec_driver_sql(f"UPDATE users SET is_admin = {admin_flag_value} WHERE username = 'admin'")
-        connection.exec_driver_sql(
-            "UPDATE payment_methods SET owner_user_id = (SELECT id FROM users WHERE username = 'admin' LIMIT 1) "
-            "WHERE owner_user_id IS NULL"
-        )
-        connection.exec_driver_sql(
-            "UPDATE services SET owner_user_id = (SELECT id FROM users WHERE username = 'admin' LIMIT 1) "
-            "WHERE owner_user_id IS NULL"
-        )
 
 
 @asynccontextmanager
@@ -105,6 +95,8 @@ async def lifespan(_: FastAPI):
     with SessionLocal() as session:
         if settings.seed_demo_data:
             seed_database(session)
+        else:
+            ensure_initial_admin(session)
     yield
 
 
@@ -365,6 +357,7 @@ def render_login_template(
     request: Request,
     *,
     login_error: Optional[str] = None,
+    login_email: str = "",
     register_error: Optional[str] = None,
     register_values: Optional[dict] = None,
 ):
@@ -375,6 +368,7 @@ def render_login_template(
             "request": request,
             "app_name": settings.app_name,
             "error": login_error,
+            "login_email": login_email,
             "register_error": register_error,
             "register_values": {
                 "full_name": values.get("full_name", ""),
@@ -413,12 +407,13 @@ def login_page(request: Request):
 def login(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
-    username: str = Form(...),
+    email: str = Form(...),
     password: str = Form(...),
 ):
-    user = db.scalar(select(User).where(User.username == username, User.is_active.is_(True)))
+    normalized_email = email.strip().lower()
+    user = db.scalar(select(User).where(func.lower(User.email) == normalized_email, User.is_active.is_(True)))
     if not user or not verify_password(password, user.password_hash):
-        return render_login_template(request, login_error="Credenciales inválidas.")
+        return render_login_template(request, login_error="Credenciales inválidas.", login_email=normalized_email)
 
     request.session["user_id"] = user.id
     return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
@@ -438,7 +433,7 @@ def register(
     form_values = {
         "full_name": full_name.strip(),
         "username": username.strip(),
-        "email": email.strip(),
+        "email": email.strip().lower(),
         "timezone_name": timezone_name,
     }
 

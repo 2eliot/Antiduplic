@@ -3,13 +3,55 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import AppSetting, Package, PaymentMethod, Sale, SaleItem, Service, User
 from app.security import hash_password
 from app.services.duplicates import build_suffix, current_month_bucket, extract_digits
+
+
+def ensure_initial_admin(session: Session) -> User:
+    admin_email = settings.initial_admin_email.strip().lower()
+    admin_username = settings.initial_admin_username.strip() or admin_email.split("@", 1)[0] or "admin"
+
+    admin = session.scalar(select(User).where(func.lower(User.email) == admin_email))
+    if not admin:
+        admin = User(
+            username=admin_username,
+            full_name=settings.initial_admin_full_name,
+            email=admin_email,
+            password_hash=hash_password(settings.initial_admin_password),
+            avatar_url=None,
+            timezone_name=settings.initial_admin_timezone,
+            subscription_ends_at=datetime.now(timezone.utc) + timedelta(days=3650),
+            is_active=True,
+            is_admin=True,
+        )
+        session.add(admin)
+        session.flush()
+    else:
+        admin.is_admin = True
+        admin.is_active = True
+        if not admin.username:
+            admin.username = admin_username
+        if not admin.full_name:
+            admin.full_name = settings.initial_admin_full_name
+        if not admin.timezone_name:
+            admin.timezone_name = settings.initial_admin_timezone
+        if admin.subscription_ends_at is None:
+            admin.subscription_ends_at = datetime.now(timezone.utc) + timedelta(days=3650)
+        session.flush()
+
+    for method in session.scalars(select(PaymentMethod).where(PaymentMethod.owner_user_id.is_(None))).all():
+        method.owner_user_id = admin.id
+    for service in session.scalars(select(Service).where(Service.owner_user_id.is_(None))).all():
+        service.owner_user_id = admin.id
+
+    session.commit()
+    session.refresh(admin)
+    return admin
 
 
 def seed_database(session: Session) -> None:
