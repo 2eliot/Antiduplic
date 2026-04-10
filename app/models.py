@@ -39,9 +39,10 @@ class User(Base):
 
 class PaymentMethod(Base):
     __tablename__ = "payment_methods"
+    __table_args__ = (UniqueConstraint("owner_user_id", "name", name="uq_payment_methods_owner_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(80), unique=True)
+    name: Mapped[str] = mapped_column(String(80))
     owner_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
@@ -54,9 +55,10 @@ class PaymentMethod(Base):
 
 class Service(Base):
     __tablename__ = "services"
+    __table_args__ = (UniqueConstraint("owner_user_id", "name", name="uq_services_owner_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(80), unique=True)
+    name: Mapped[str] = mapped_column(String(80))
     owner_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)

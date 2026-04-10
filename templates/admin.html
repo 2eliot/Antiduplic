@@ -12,36 +12,75 @@
     </div>
     <div class="history-stack">
         {% for user in admin_users %}
-        <article class="history-card entity-card--stack">
-            <div class="history-card__top">
-                <strong>{{ user.username }}</strong>
-                <span>{{ 'Activo' if user.is_active else 'Inactivo' }} · {{ user.days_left }} dias</span>
-            </div>
-            <p>{{ user.full_name }} · {{ user.email }}</p>
-            <div class="tag-row">
-                <span class="tag">Dias: {{ user.days_left }}</span>
-                <span class="tag">{{ 'Activo' if user.is_active else 'Inactivo' }}</span>
-            </div>
-            <div class="history-stack">
-                {% for sale in user.recent_sales %}
-                <article class="history-card">
+        <details class="history-card entity-card--stack collapsible-subpanel"{% if admin_feedback and admin_feedback.target_user_id == user.id %} open{% endif %}>
+            <summary class="collapsible-summary collapsible-summary--subpanel">
+                <div>
                     <div class="history-card__top">
-                        <strong>#{{ sale['id'] }}</strong>
-                        <span>{{ sale['created_at'] }}</span>
+                        <strong>{{ user.username }}</strong>
+                        <span>{{ 'Activo' if user.is_active else 'Inactivo' }} · {{ user.days_left }} dias</span>
                     </div>
-                    <p>{{ sale['payment_method'] }} · Ref {{ sale['reference'] }}</p>
-                    <div class="history-card__totals">USD {{ sale['amount_paid_usd'] }} · Bs {{ sale['amount_paid_bs'] }}</div>
-                </article>
-                {% else %}
-                <p class="empty-state">Este usuario todavia no tiene historial.</p>
-                {% endfor %}
-            </div>
-            <div class="table-actions">
-                <form method="post" action="/admin/users/{{ user.id }}/toggle-active">
-                    <button class="ghost-action" type="submit">{{ 'Desactivar' if user.is_active else 'Reactivar' }}</button>
+                    <p>{{ user.full_name }} · {{ user.email }}</p>
+                </div>
+                <div class="collapsible-summary__meta">
+                    <div class="tag-row">
+                        <span class="tag">Dias: {{ user.days_left }}</span>
+                        <span class="tag">{{ user.timezone_name }}</span>
+                        <span class="tag">{{ 'Activo' if user.is_active else 'Inactivo' }}</span>
+                    </div>
+                    <span class="collapsible-chevron" aria-hidden="true">▾</span>
+                </div>
+            </summary>
+            <div class="collapsible-content">
+                {% if admin_feedback and admin_feedback.target_user_id == user.id %}
+                <div class="alert alert--{{ admin_feedback.type }}">{{ admin_feedback.message }}</div>
+                {% endif %}
+
+                <form method="post" action="/admin/users/{{ user.id }}/update" class="form-stack admin-user-form">
+                    <div class="entity-form-grid admin-user-grid">
+                        <input name="full_name" type="text" value="{{ user.full_name }}" placeholder="Nombre completo" required>
+                        <input name="username" type="text" value="{{ user.username }}" placeholder="Usuario" required>
+                        <input name="email" type="email" value="{{ user.email }}" placeholder="Correo" required>
+                        <select name="timezone_name">
+                            <option value="America/Caracas"{% if user.timezone_name == 'America/Caracas' %} selected{% endif %}>America/Caracas</option>
+                            <option value="America/Bogota"{% if user.timezone_name == 'America/Bogota' %} selected{% endif %}>America/Bogota</option>
+                            <option value="America/Panama"{% if user.timezone_name == 'America/Panama' %} selected{% endif %}>America/Panama</option>
+                            <option value="America/Mexico_City"{% if user.timezone_name == 'America/Mexico_City' %} selected{% endif %}>America/Mexico_City</option>
+                            <option value="America/Lima"{% if user.timezone_name == 'America/Lima' %} selected{% endif %}>America/Lima</option>
+                            <option value="UTC"{% if user.timezone_name == 'UTC' %} selected{% endif %}>UTC</option>
+                        </select>
+                    </div>
+                    <div class="entity-form-grid admin-user-grid">
+                        <input name="new_password" type="password" minlength="6" placeholder="Nueva contraseña opcional">
+                        <input name="confirm_password" type="password" minlength="6" placeholder="Confirmar nueva contraseña">
+                    </div>
+                    <small class="helper-text">Si el usuario olvidó su contraseña, coloca una nueva y confirma. Si dejas ambos campos vacíos, solo se actualizan sus datos.</small>
+                    <div class="table-actions">
+                        <button class="secondary-button" type="submit">Guardar cambios</button>
+                    </div>
                 </form>
+
+                <div class="history-stack">
+                    {% for sale in user.recent_sales %}
+                    <article class="history-card">
+                        <div class="history-card__top">
+                            <strong>#{{ sale['id'] }}</strong>
+                            <span>{{ sale['created_at'] }}</span>
+                        </div>
+                        <p>{{ sale['payment_method'] }} · Ref {{ sale['reference'] }}</p>
+                        <div class="history-card__totals">USD {{ sale['amount_paid_usd'] }} · Bs {{ sale['amount_paid_bs'] }}</div>
+                    </article>
+                    {% else %}
+                    <p class="empty-state">Este usuario todavia no tiene historial.</p>
+                    {% endfor %}
+                </div>
+
+                <div class="table-actions">
+                    <form method="post" action="/admin/users/{{ user.id }}/toggle-active">
+                        <button class="ghost-action" type="submit">{{ 'Desactivar' if user.is_active else 'Reactivar' }}</button>
+                    </form>
+                </div>
             </div>
-        </article>
+        </details>
         {% endfor %}
     </div>
 </section>

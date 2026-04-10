@@ -78,7 +78,102 @@ def ensure_database_features() -> None:
         },
     }
 
-    with engine.begin() as connection:
+    sqlite_catalog_tables = {
+        "payment_methods": {
+            "constraint_name": "uq_payment_methods_owner_name",
+            "columns": ["id", "name", "owner_user_id", "notes", "display_order", "is_default", "is_active"],
+            "ddl": """
+                CREATE TABLE payment_methods__new (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    name VARCHAR(80) NOT NULL,
+                    owner_user_id INTEGER,
+                    notes VARCHAR(255),
+                    display_order INTEGER NOT NULL,
+                    is_default BOOLEAN NOT NULL,
+                    is_active BOOLEAN NOT NULL,
+                    CONSTRAINT uq_payment_methods_owner_name UNIQUE (owner_user_id, name),
+                    FOREIGN KEY(owner_user_id) REFERENCES users (id)
+                )
+            """,
+        },
+        "services": {
+            "constraint_name": "uq_services_owner_name",
+            "columns": ["id", "name", "owner_user_id", "notes", "display_order", "is_default", "is_active"],
+            "ddl": """
+                CREATE TABLE services__new (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    name VARCHAR(80) NOT NULL,
+                    owner_user_id INTEGER,
+                    notes VARCHAR(255),
+                    display_order INTEGER NOT NULL,
+                    is_default BOOLEAN NOT NULL,
+                    is_active BOOLEAN NOT NULL,
+                    CONSTRAINT uq_services_owner_name UNIQUE (owner_user_id, name),
+                    FOREIGN KEY(owner_user_id) REFERENCES users (id)
+                )
+            """,
+        },
+    }
+
+    def has_global_name_unique(table_name: str) -> bool:
+        table_inspector = inspect(engine)
+        return any((constraint.get("column_names") or []) == ["name"] for constraint in table_inspector.get_unique_constraints(table_name))
+
+    def has_owner_name_unique(table_name: str, constraint_name: str) -> bool:
+        table_inspector = inspect(engine)
+        constraints = table_inspector.get_unique_constraints(table_name)
+        for constraint in constraints:
+            columns = constraint.get("column_names") or []
+            if constraint.get("name") == constraint_name:
+                return True
+            if set(columns) == {"owner_user_id", "name"}:
+                return True
+        return False
+
+    def rebuild_sqlite_catalog_table(connection, table_name: str) -> None:
+        table_config = sqlite_catalog_tables[table_name]
+        column_csv = ", ".join(table_config["columns"])
+        connection.exec_driver_sql(table_config["ddl"])
+        connection.exec_driver_sql(
+            f"INSERT INTO {table_name}__new ({column_csv}) SELECT {column_csv} FROM {table_name}"
+        )
+        connection.exec_driver_sql(f"DROP TABLE {table_name}")
+        connection.exec_driver_sql(f"ALTER TABLE {table_name}__new RENAME TO {table_name}")
+
+    def migrate_catalog_uniqueness(connection) -> None:
+        if sqlite_mode:
+            needs_sqlite_migration = any(
+                has_global_name_unique(table_name) or not has_owner_name_unique(table_name, table_config["constraint_name"])
+                for table_name, table_config in sqlite_catalog_tables.items()
+            )
+            if not needs_sqlite_migration:
+                return
+
+            connection.commit()
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            try:
+                for table_name in sqlite_catalog_tables:
+                    if has_global_name_unique(table_name) or not has_owner_name_unique(table_name, sqlite_catalog_tables[table_name]["constraint_name"]):
+                        rebuild_sqlite_catalog_table(connection, table_name)
+                connection.commit()
+            finally:
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            return
+
+        for table_name, table_config in sqlite_catalog_tables.items():
+            table_inspector = inspect(engine)
+            unique_constraints = table_inspector.get_unique_constraints(table_name)
+            global_constraints = [
+                constraint for constraint in unique_constraints if (constraint.get("column_names") or []) == ["name"] and constraint.get("name")
+            ]
+            for constraint in global_constraints:
+                connection.exec_driver_sql(f"ALTER TABLE {table_name} DROP CONSTRAINT {constraint['name']}")
+            if not has_owner_name_unique(table_name, table_config["constraint_name"]):
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {table_name} ADD CONSTRAINT {table_config['constraint_name']} UNIQUE (owner_user_id, name)"
+                )
+
+    with engine.connect() as connection:
         for table_name, columns in column_map.items():
             if not inspector.has_table(table_name):
                 continue
@@ -86,6 +181,9 @@ def ensure_database_features() -> None:
             for column_name, ddl in columns.items():
                 if column_name not in existing_columns:
                     connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
+        connection.commit()
+        migrate_catalog_uniqueness(connection)
+        connection.commit()
 
 
 @asynccontextmanager
@@ -179,6 +277,15 @@ def apply_catalog_owner_filter(statement, owner_column, user: User):
     if user.is_admin:
         return statement.where(or_(owner_column == user.id, owner_column.is_(None)))
     return statement.where(owner_column == user.id)
+
+
+def catalog_name_exists(db: Session, model, user: User, name: str, *, exclude_id: Optional[int] = None) -> bool:
+    normalized_name = name.strip().lower()
+    statement = select(model.id).where(func.lower(model.name) == normalized_name)
+    statement = apply_catalog_owner_filter(statement, model.owner_user_id, user)
+    if exclude_id is not None:
+        statement = statement.where(model.id != exclude_id)
+    return db.scalar(statement) is not None
 
 
 def user_can_manage_catalog(user: User) -> bool:
@@ -583,7 +690,10 @@ def create_payment_method(
     is_default: bool = Form(False),
 ):
     owner_user_id = current_user.id
-    method = PaymentMethod(name=name.strip(), owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
+    normalized_name = name.strip()
+    if catalog_name_exists(db, PaymentMethod, current_user, normalized_name):
+        return RedirectResponse("/payment-methods?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+    method = PaymentMethod(name=normalized_name, owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
     db.add(method)
     try:
         db.flush()
@@ -607,7 +717,10 @@ def update_payment_method(
     is_default: bool = Form(False),
 ):
     method = get_managed_payment_method(db, current_user, method_id)
-    method.name = name.strip()
+    normalized_name = name.strip()
+    if catalog_name_exists(db, PaymentMethod, current_user, normalized_name, exclude_id=method.id):
+        return RedirectResponse("/payment-methods?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+    method.name = normalized_name
     method.notes = notes.strip() or None
     method.display_order = display_order
     if is_default:
@@ -667,7 +780,10 @@ def create_service(
     is_default: bool = Form(False),
 ):
     owner_user_id = current_user.id
-    service = Service(name=name.strip(), owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
+    normalized_name = name.strip()
+    if catalog_name_exists(db, Service, current_user, normalized_name):
+        return RedirectResponse("/services?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+    service = Service(name=normalized_name, owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
     db.add(service)
     try:
         db.flush()
@@ -691,7 +807,10 @@ def update_service(
     is_default: bool = Form(False),
 ):
     service = get_managed_service(db, current_user, service_id)
-    service.name = name.strip()
+    normalized_name = name.strip()
+    if catalog_name_exists(db, Service, current_user, normalized_name, exclude_id=service.id):
+        return RedirectResponse("/services?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+    service.name = normalized_name
     service.notes = notes.strip() or None
     service.display_order = display_order
     if is_default:
@@ -993,6 +1112,8 @@ def admin_page(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_admin_user)],
 ):
+    status_key = request.query_params.get("status")
+    target_user_id = request.query_params.get("target_user_id")
     setting = get_setting(db)
     users = db.scalars(select(User).where(User.is_admin.is_(False)).order_by(User.created_at.desc())).all()
     requests = db.scalars(select(DaysExtensionRequest).options(joinedload(DaysExtensionRequest.user)).order_by(DaysExtensionRequest.created_at.desc())).all()
@@ -1017,20 +1138,90 @@ def admin_page(
                 "username": user.username,
                 "full_name": user.full_name,
                 "email": user.email,
+                "timezone_name": user.timezone_name,
                 "is_active": user.is_active,
                 "days_left": calculate_days_left(user.subscription_ends_at, user.timezone_name),
                 "recent_sales": user_sales_map.get(user.id, [])[:3],
             }
         )
 
+    status_messages = {
+        "user-updated": ("success", "Los datos del usuario se actualizaron correctamente."),
+        "password-reset": ("success", "La contraseña del usuario se actualizó correctamente."),
+        "duplicate-username": ("error", "Ese nombre de usuario ya está en uso por otra cuenta."),
+        "duplicate-email": ("error", "Ese correo ya está en uso por otra cuenta."),
+        "password-mismatch": ("error", "La nueva contraseña y su confirmación no coinciden."),
+        "password-too-short": ("error", "La nueva contraseña debe tener al menos 6 caracteres."),
+    }
+    admin_feedback = None
+    if status_key in status_messages:
+        feedback_type, feedback_message = status_messages[status_key]
+        admin_feedback = {
+            "type": feedback_type,
+            "message": feedback_message,
+            "target_user_id": int(target_user_id) if target_user_id and target_user_id.isdigit() else None,
+        }
+
     return templates.TemplateResponse(
         "admin.html",
         {
             "admin_users": user_rows,
             "extension_requests": requests,
+            "admin_feedback": admin_feedback,
             **layout_context(request, current_user),
         },
     )
+
+
+@app.post("/admin/users/{user_id}/update")
+def update_user_by_admin(
+    user_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[User, Depends(get_admin_user)],
+    full_name: str = Form(...),
+    username: str = Form(...),
+    email: str = Form(...),
+    timezone_name: str = Form(...),
+    new_password: str = Form(""),
+    confirm_password: str = Form(""),
+):
+    user = db.get(User, user_id)
+    if not user or user.is_admin:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+
+    normalized_username = username.strip()
+    normalized_email = email.strip().lower()
+    normalized_full_name = full_name.strip()
+    normalized_timezone = timezone_name if timezone_name in SUPPORTED_TIMEZONES else "America/Caracas"
+    password_value = new_password.strip()
+    confirm_value = confirm_password.strip()
+
+    username_owner = db.scalar(select(User).where(func.lower(User.username) == normalized_username.lower(), User.id != user.id))
+    if username_owner:
+        return RedirectResponse(f"/admin?status=duplicate-username&target_user_id={user.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+    email_owner = db.scalar(select(User).where(func.lower(User.email) == normalized_email, User.id != user.id))
+    if email_owner:
+        return RedirectResponse(f"/admin?status=duplicate-email&target_user_id={user.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+    if password_value or confirm_value:
+        if len(password_value) < 6:
+            return RedirectResponse(f"/admin?status=password-too-short&target_user_id={user.id}", status_code=status.HTTP_303_SEE_OTHER)
+        if password_value != confirm_value:
+            return RedirectResponse(f"/admin?status=password-mismatch&target_user_id={user.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+    user.full_name = normalized_full_name
+    user.username = normalized_username
+    user.email = normalized_email
+    user.timezone_name = normalized_timezone
+
+    status_value = "user-updated"
+    if password_value:
+        user.password_hash = hash_password(password_value)
+        status_value = "password-reset"
+
+    db.commit()
+    return RedirectResponse(f"/admin?status={status_value}&target_user_id={user.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/users/{user_id}/toggle-active")

@@ -6,82 +6,131 @@
     <span class="soft-chip">PAQUETES USD Y BS</span>
 </section>
 
-<section class="workspace-panel form-stack">
-    <div class="panel-heading-heavy">
-        <h3>NUEVO SERVICIO</h3>
+<details class="workspace-panel collapsible-panel form-stack"{% if page_error %} open{% endif %}>
+    <summary class="collapsible-summary collapsible-summary--panel">
+        <div class="panel-heading-heavy panel-heading-heavy--tight">
+            <h3>NUEVO SERVICIO</h3>
+            <span class="soft-chip">PLEGABLE</span>
+        </div>
+        <span class="collapsible-chevron" aria-hidden="true">▾</span>
+    </summary>
+    <div class="collapsible-content">
+        {% if page_error %}
+        <div class="alert alert--error">{{ page_error }}</div>
+        {% endif %}
+        <form method="post" action="/services" class="entity-form-grid">
+            <input name="name" type="text" placeholder="Nombre del servicio" required>
+            <input name="notes" type="text" placeholder="Notas o categoria">
+            <input name="display_order" type="number" min="0" value="0" required>
+            <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"> Predeterminado</label>
+            <button class="primary-button primary-button--compact" type="submit">Guardar servicio</button>
+        </form>
     </div>
-    {% if page_error %}
-    <div class="alert alert--error">{{ page_error }}</div>
-    {% endif %}
-    <form method="post" action="/services" class="entity-form-grid">
-        <input name="name" type="text" placeholder="Nombre del servicio" required>
-        <input name="notes" type="text" placeholder="Notas o categoria">
-        <input name="display_order" type="number" min="0" value="0" required>
-        <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"> Predeterminado</label>
-        <button class="primary-button primary-button--compact" type="submit">Guardar servicio</button>
-    </form>
-</section>
+</details>
 
 <section class="stack-column">
     {% for service in services %}
-    <article class="workspace-panel entity-card entity-card--stack">
-        <div class="service-card__left">
-            <div class="entity-card__icon">⌘</div>
-            <div>
-                <h3>{{ loop.index }}. {{ service.name }}</h3>
-                <p>{{ service.notes or 'Sin descripcion' }}</p>
+    <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card">
+        <summary class="collapsible-summary collapsible-summary--card">
+            <div class="service-card__left">
+                <div class="entity-card__icon">⌘</div>
+                <div>
+                    <h3>{{ loop.index }}. {{ service.name }}</h3>
+                    <p>{{ service.notes or 'Sin descripcion' }}</p>
+                </div>
             </div>
-        </div>
-        <div class="tag-row">
-            {% if service.is_default %}<span class="tag">Predeterminado</span>{% endif %}
-            <span class="tag">{{ service.packages | selectattr('is_active') | list | length }} paquetes activos</span>
-            <span class="tag">{{ 'Activo' if service.is_active else 'Inactivo' }}</span>
-        </div>
-        <form method="post" action="/services/{{ service.id }}/update" class="form-stack">
-            <div class="entity-form-grid">
-                <input name="name" type="text" value="{{ service.name }}" required>
-                <input name="notes" type="text" value="{{ service.notes or '' }}" placeholder="Notas">
-                <input name="display_order" type="number" min="0" value="{{ service.display_order }}" required>
-                <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"{% if service.is_default %} checked{% endif %}> Predeterminado</label>
+            <div class="collapsible-summary__meta">
+                <div class="tag-row">
+                    {% if service.is_default %}<span class="tag">Predeterminado</span>{% endif %}
+                    <span class="tag">{{ service.packages | selectattr('is_active') | list | length }} paquetes activos</span>
+                    <span class="tag">{{ 'Activo' if service.is_active else 'Inactivo' }}</span>
+                </div>
+                <span class="collapsible-chevron" aria-hidden="true">▾</span>
             </div>
-            <div class="table-actions">
-                <button class="secondary-button" type="submit">Actualizar servicio</button>
-            </div>
-        </form>
-        <form method="post" action="/services/{{ service.id }}/toggle">
-            <button class="ghost-action" type="submit">{{ 'Desactivar' if service.is_active else 'Reactivar' }}</button>
-        </form>
+        </summary>
+        <div class="collapsible-content service-packages">
+            <form method="post" action="/services/{{ service.id }}/update" class="form-stack">
+                <div class="entity-form-grid">
+                    <input name="name" type="text" value="{{ service.name }}" required>
+                    <input name="notes" type="text" value="{{ service.notes or '' }}" placeholder="Notas">
+                    <input name="display_order" type="number" min="0" value="{{ service.display_order }}" required>
+                    <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"{% if service.is_default %} checked{% endif %}> Predeterminado</label>
+                </div>
+                <div class="table-actions">
+                    <button class="secondary-button" type="submit">Actualizar servicio</button>
+                </div>
+            </form>
+            <form method="post" action="/services/{{ service.id }}/toggle">
+                <button class="ghost-action" type="submit">{{ 'Desactivar' if service.is_active else 'Reactivar' }}</button>
+            </form>
 
-        <div class="service-packages">
-            {% for package in service.packages | sort(attribute='display_order') %}
-            <form method="post" action="/packages/{{ package.id }}/update" class="package-editor">
-                <input name="name" type="text" value="{{ package.name }}" required>
-                <select name="price_currency">
-                    <option value="USD"{% if package.bs_price is none %} selected{% endif %}>USD</option>
-                    <option value="BS"{% if package.bs_price is not none %} selected{% endif %}>BS</option>
-                </select>
-                <input name="price_value" type="number" min="0" step="0.01" value="{{ package.bs_price if package.bs_price is not none else package.usd_price }}" required>
-                <input name="display_order" type="number" min="0" value="{{ package.display_order }}" required>
-                <button class="secondary-button" type="submit">Guardar paquete</button>
-            </form>
-            <form method="post" action="/packages/{{ package.id }}/toggle" class="table-actions">
-                <span class="helper-text">{{ 'Precio en Bs ' ~ ('%.2f'|format(package.bs_price)) if package.bs_price is not none else 'Precio en USD ' ~ ('%.2f'|format(package.usd_price)) }}</span>
-                <button class="ghost-action" type="submit">{{ 'Desactivar' if package.is_active else 'Reactivar' }}</button>
-            </form>
-            {% endfor %}
+            <details class="collapsible-subpanel">
+                <summary class="collapsible-summary collapsible-summary--subpanel">
+                    <strong>PAQUETES</strong>
+                    <div class="collapsible-summary__meta">
+                        <span class="soft-chip">{{ service.packages | length }} items</span>
+                        <span class="collapsible-chevron" aria-hidden="true">▾</span>
+                    </div>
+                </summary>
+                <div class="collapsible-content service-packages">
+                    {% for package in service.packages | sort(attribute='display_order') %}
+                    <details class="collapsible-subcard">
+                        <summary class="collapsible-summary collapsible-summary--subcard">
+                            <div>
+                                <strong>{{ package.name }}</strong>
+                                <p class="helper-text">{{ 'Precio en Bs ' ~ ('%.2f'|format(package.bs_price)) if package.bs_price is not none else 'Precio en USD ' ~ ('%.2f'|format(package.usd_price)) }}</p>
+                            </div>
+                            <div class="collapsible-summary__meta">
+                                <div class="tag-row">
+                                    <span class="tag">Orden {{ package.display_order }}</span>
+                                    <span class="tag">{{ 'Activo' if package.is_active else 'Inactivo' }}</span>
+                                </div>
+                                <span class="collapsible-chevron" aria-hidden="true">▾</span>
+                            </div>
+                        </summary>
+                        <div class="collapsible-content">
+                            <form method="post" action="/packages/{{ package.id }}/update" class="package-editor">
+                                <input name="name" type="text" value="{{ package.name }}" required>
+                                <select name="price_currency">
+                                    <option value="USD"{% if package.bs_price is none %} selected{% endif %}>USD</option>
+                                    <option value="BS"{% if package.bs_price is not none %} selected{% endif %}>BS</option>
+                                </select>
+                                <input name="price_value" type="number" min="0" step="0.01" value="{{ package.bs_price if package.bs_price is not none else package.usd_price }}" required>
+                                <input name="display_order" type="number" min="0" value="{{ package.display_order }}" required>
+                                <button class="secondary-button" type="submit">Guardar paquete</button>
+                            </form>
+                            <form method="post" action="/packages/{{ package.id }}/toggle" class="table-actions">
+                                <button class="ghost-action" type="submit">{{ 'Desactivar' if package.is_active else 'Reactivar' }}</button>
+                            </form>
+                        </div>
+                    </details>
+                    {% endfor %}
 
-            <form method="post" action="/services/{{ service.id }}/packages" class="package-editor package-editor--new">
-                <input name="name" type="text" placeholder="Nuevo paquete" required>
-                <select name="price_currency">
-                    <option value="USD">USD</option>
-                    <option value="BS">BS</option>
-                </select>
-                <input name="price_value" type="number" min="0" step="0.01" placeholder="0.00" required>
-                <input name="display_order" type="number" min="0" value="0" required>
-                <button class="primary-button primary-button--compact" type="submit">Agregar paquete</button>
-            </form>
+                    <details class="collapsible-subcard collapsible-subcard--new">
+                        <summary class="collapsible-summary collapsible-summary--subcard">
+                            <div>
+                                <strong>AGREGAR PAQUETE</strong>
+                                <p class="helper-text">Crea un nuevo paquete sin expandir todo el servicio.</p>
+                            </div>
+                            <span class="collapsible-chevron" aria-hidden="true">▾</span>
+                        </summary>
+                        <div class="collapsible-content">
+                            <form method="post" action="/services/{{ service.id }}/packages" class="package-editor package-editor--new">
+                                <input name="name" type="text" placeholder="Nuevo paquete" required>
+                                <select name="price_currency">
+                                    <option value="USD">USD</option>
+                                    <option value="BS">BS</option>
+                                </select>
+                                <input name="price_value" type="number" min="0" step="0.01" placeholder="0.00" required>
+                                <input name="display_order" type="number" min="0" value="0" required>
+                                <button class="primary-button primary-button--compact" type="submit">Agregar paquete</button>
+                            </form>
+                        </div>
+                    </details>
+                </div>
+            </details>
         </div>
-    </article>
+    </details>
     {% endfor %}
 </section>
 {% endblock %}

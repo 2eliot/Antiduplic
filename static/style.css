@@ -416,6 +416,69 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 .package-editor > * { flex: 1 1 140px; }
 .package-editor > button { flex: 0 0 auto; }
 .package-editor--new { padding-top: 6px; border-top: 1px solid var(--stroke-soft); }
+.panel-heading-heavy--tight { margin-bottom: 0; }
+.collapsible-panel { padding: 0; overflow: hidden; }
+.collapsible-panel > summary,
+.collapsible-subpanel > summary,
+.collapsible-subcard > summary { list-style: none; }
+.collapsible-panel > summary::-webkit-details-marker,
+.collapsible-subpanel > summary::-webkit-details-marker,
+.collapsible-subcard > summary::-webkit-details-marker { display: none; }
+.collapsible-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    cursor: pointer;
+}
+.collapsible-summary--panel,
+.collapsible-summary--card { padding: 18px; }
+.collapsible-summary--subpanel,
+.collapsible-summary--subcard { padding: 14px 16px; }
+.collapsible-summary--card h3,
+.collapsible-summary--subcard strong,
+.collapsible-summary--subpanel strong { margin: 0; }
+.collapsible-summary--card p,
+.collapsible-summary--subcard p { margin: 4px 0 0; }
+.collapsible-summary__meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+}
+.collapsible-chevron {
+    color: #d8d0c8;
+    font-size: 0.95rem;
+    transition: transform 140ms ease;
+}
+.collapsible-panel[open] > .collapsible-summary .collapsible-chevron,
+.collapsible-subpanel[open] > .collapsible-summary .collapsible-chevron,
+.collapsible-subcard[open] > .collapsible-summary .collapsible-chevron { transform: rotate(180deg); }
+.collapsible-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 0 18px 18px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+.collapsible-subpanel,
+.collapsible-subcard {
+    background: #18181b;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+}
+.collapsible-subpanel > .collapsible-content,
+.collapsible-subcard > .collapsible-content { padding: 0 16px 16px; }
+.collapsible-subcard--new {
+    border-style: dashed;
+    border-color: rgba(155, 90, 255, 0.35);
+}
+.collapsible-summary:focus-visible {
+    outline: 2px solid rgba(155, 90, 255, 0.65);
+    outline-offset: -2px;
+}
+.admin-user-form { width: 100%; }
+.admin-user-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .access-editor { display: flex; flex-direction: column; gap: 12px; width: 100%; }
 .access-block { display: flex; flex-direction: column; gap: 8px; }
 .checkbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
@@ -434,6 +497,10 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
 @media (max-width: 1200px) {
     .reference-layout, .cards-grid--two, .profile-grid, .profile-bottom-grid, .filters-grid, .metric-grid, .guide-grid, .entity-form-grid { grid-template-columns: 1fr; }
     .history-table__head, .history-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .collapsible-summary,
+    .collapsible-summary__meta { align-items: flex-start; flex-direction: column; }
+    .collapsible-summary__meta { width: 100%; margin-left: 0; }
+    .admin-user-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 860px) {
