@@ -26,6 +26,7 @@ from app.database import SessionLocal, engine, get_db
 from app.models import AppSetting, Base, DaysExtensionRequest, Package, PaymentMethod, Sale, SaleItem, Service, User
 from app.security import hash_password, verify_password
 from app.seed import ensure_initial_admin, seed_database
+from app.services.pabilo import verify_pabilo_reference
 from app.services.duplicates import build_suffix, check_duplicate_reference, current_month_bucket, extract_digits
 
 
@@ -58,6 +59,10 @@ class CreateSalePayload(BaseModel):
     items: list[SaleItemPayload] = Field(min_length=1)
 
 
+class PabiloReferencePayload(BaseModel):
+    reference: str = Field(min_length=1)
+
+
 def ensure_database_features() -> None:
     inspector = inspect(engine)
     if not inspector.has_table("users"):
@@ -68,6 +73,9 @@ def ensure_database_features() -> None:
         "users": {
             "is_admin": "INTEGER NOT NULL DEFAULT 0" if sqlite_mode else "BOOLEAN NOT NULL DEFAULT FALSE",
             "exchange_rate_bs": "NUMERIC(10, 2)",
+            "pabilo_api_key": "VARCHAR(255)",
+            "pabilo_user_bank_id": "VARCHAR(100)",
+            "pabilo_enabled": "INTEGER NOT NULL DEFAULT 0" if sqlite_mode else "BOOLEAN NOT NULL DEFAULT FALSE",
         },
         "payment_methods": {
             "owner_user_id": "INTEGER",
@@ -378,6 +386,7 @@ def build_profile_context(request: Request, db: Session, current_user: User, *, 
             .order_by(DaysExtensionRequest.created_at.desc())
         ),
         "profile_error": profile_error,
+        "pabilo_ready": bool(current_user.pabilo_api_key and current_user.pabilo_user_bank_id) if current_user.is_admin else False,
         **layout_context(request, current_user),
     }
 
@@ -513,6 +522,25 @@ def user_can_operate(user: User, days_left: int, payment_methods: list[PaymentMe
     if user.is_admin:
         return bool(payment_methods) and bool(allowed_package_ids)
     return days_left > 0 and bool(payment_methods) and bool(allowed_package_ids)
+
+
+def user_can_verify_pabilo(current_user: User) -> bool:
+    return current_user.is_admin or current_user.pabilo_enabled
+
+
+def get_pabilo_credentials_owner(db: Session, current_user: User) -> Optional[User]:
+    if current_user.is_admin and (current_user.pabilo_api_key or current_user.pabilo_user_bank_id):
+        return current_user
+    return db.scalar(
+        select(User)
+        .where(
+            User.is_admin.is_(True),
+            User.is_active.is_(True),
+            User.pabilo_api_key.is_not(None),
+            User.pabilo_user_bank_id.is_not(None),
+        )
+        .order_by(User.id.asc())
+    )
 
 
 def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]) -> User:
@@ -905,6 +933,7 @@ def dashboard(
         "services": services,
         "exchange_rate": f"{exchange_rate:.2f}",
         "exchange_rate_feedback": exchange_rate_feedback,
+        "can_verify_pabilo": user_can_verify_pabilo(current_user),
         "catalog_json": json.dumps(serialize_catalog(services, exchange_rate, allowed_package_ids if not current_user.is_admin else None)),
         "timezone_name": current_user.timezone_name,
         "days_left": days_left,
@@ -1431,15 +1460,24 @@ def update_profile(
     email: str = Form(...),
     timezone_name: str = Form(...),
     current_password: str = Form(""),
+    pabilo_user_bank_id: str = Form(""),
+    pabilo_api_key: str = Form(""),
     avatar_file: Optional[UploadFile] = File(None),
 ):
     normalized_full_name = full_name.strip()
     normalized_email = email.strip().lower()
     normalized_timezone = timezone_name if timezone_name in SUPPORTED_TIMEZONES else current_user.timezone_name
+    normalized_pabilo_user_bank_id = pabilo_user_bank_id.strip() or None
+    normalized_pabilo_api_key = pabilo_api_key.strip() or None
+    pabilo_changed = current_user.is_admin and (
+        normalized_pabilo_user_bank_id != (current_user.pabilo_user_bank_id or None)
+        or normalized_pabilo_api_key != (current_user.pabilo_api_key or None)
+    )
     profile_changed = (
         normalized_full_name != current_user.full_name
         or normalized_email != current_user.email
         or normalized_timezone != current_user.timezone_name
+        or pabilo_changed
     )
 
     if profile_changed and not verify_password(current_password, current_user.password_hash):
@@ -1452,6 +1490,9 @@ def update_profile(
     current_user.full_name = normalized_full_name
     current_user.email = normalized_email
     current_user.timezone_name = normalized_timezone
+    if current_user.is_admin:
+        current_user.pabilo_user_bank_id = normalized_pabilo_user_bank_id
+        current_user.pabilo_api_key = normalized_pabilo_api_key
     if avatar_file and avatar_file.filename:
         try:
             current_user.avatar_url = save_avatar_upload(avatar_file, current_user.id, current_user.avatar_url)
@@ -1534,6 +1575,7 @@ def admin_page(
                 "email": user.email,
                 "timezone_name": user.timezone_name,
                 "is_active": user.is_active,
+                "pabilo_enabled": user.pabilo_enabled,
                 "days_left": calculate_days_left(user.subscription_ends_at, user.timezone_name),
                 "recent_sales": user_sales_map.get(user.id, [])[:3],
             }
@@ -1579,6 +1621,7 @@ def update_user_by_admin(
     timezone_name: str = Form(...),
     new_password: str = Form(""),
     confirm_password: str = Form(""),
+    pabilo_enabled: bool = Form(False),
 ):
     user = db.get(User, user_id)
     if not user or user.is_admin:
@@ -1609,6 +1652,7 @@ def update_user_by_admin(
     user.username = normalized_username
     user.email = normalized_email
     user.timezone_name = normalized_timezone
+    user.pabilo_enabled = pabilo_enabled
 
     status_value = "user-updated"
     if password_value:
@@ -1666,6 +1710,29 @@ def reference_check(
     if payment_method.id not in accessible_method_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes validar referencias con ese método.")
     return JSONResponse(check_duplicate_reference(db, payment_method_id, reference, current_user.timezone_name))
+
+
+@app.post("/api/pabilo/verify-reference")
+def verify_reference_with_pabilo(
+    payload: PabiloReferencePayload,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    if not user_can_verify_pabilo(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tu usuario no tiene habilitada la verificación con Pabilo.")
+
+    owner_user = get_pabilo_credentials_owner(db, current_user)
+    if not owner_user or not owner_user.pabilo_api_key or not owner_user.pabilo_user_bank_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Un administrador debe configurar API Key y UserBankId de Pabilo en su perfil.")
+
+    result = verify_pabilo_reference(
+        api_key=owner_user.pabilo_api_key,
+        user_bank_id=owner_user.pabilo_user_bank_id,
+        reference=payload.reference,
+        base_url=settings.pabilo_base_url,
+        timeout=settings.pabilo_timeout,
+    )
+    return JSONResponse(result)
 
 
 @app.post("/api/sales")

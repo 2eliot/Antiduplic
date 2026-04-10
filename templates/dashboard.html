@@ -45,11 +45,28 @@
 
         <div class="step-block">
             <div class="step-title"><span class="step-number">2</span><h3>Coloca numero de pago</h3></div>
-            <div class="reference-shell">
-                <input id="reference_input" class="reference-input" type="text" placeholder="Ingresa la referencia...">
-                <button type="button" class="icon-button icon-button--clear is-hidden" id="clear_reference_button" aria-label="Limpiar referencia">×</button>
+            <div class="reference-shell{% if can_verify_pabilo %} reference-shell--with-pabilo{% endif %}">
+                <div class="reference-input-wrap">
+                    <input id="reference_input" class="reference-input" type="text" placeholder="Ingresa la referencia...">
+                    <button type="button" class="icon-button icon-button--clear is-hidden" id="clear_reference_button" aria-label="Limpiar referencia">×</button>
+                </div>
+                {% if can_verify_pabilo %}
+                <button type="button" class="secondary-button secondary-button--pabilo" id="verify_pabilo_button">Verificar en Pabilo</button>
+                {% endif %}
             </div>
             <small class="helper-text">Ultimos 6: <span data-last-six>------</span></small>
+            {% if can_verify_pabilo %}
+            <small class="helper-text">La consulta usa solo la referencia. Si Pabilo devuelve un monto válido, la venta se guardará con ese monto pagado.</small>
+            <div id="pabilo_result_panel" class="pabilo-panel is-hidden">
+                <div class="pabilo-panel__header">
+                    <strong id="pabilo_result_title">Consulta Pabilo</strong>
+                    <span class="soft-chip" id="pabilo_result_badge">Sin consulta</span>
+                </div>
+                <p id="pabilo_result_message" class="helper-text"></p>
+                <div id="pabilo_result_summary" class="pabilo-summary"></div>
+                <pre id="pabilo_result_raw" class="pabilo-raw"></pre>
+            </div>
+            {% endif %}
         </div>
 
         <div class="step-block">

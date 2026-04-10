@@ -296,11 +296,25 @@ a, button, input, textarea, select { font: inherit; }
 .choice-chip.is-selected, .primary-button, .secondary-button:hover { background: var(--danger); color: #fff; }
 
 .reference-shell { position: relative; }
+.reference-shell--with-pabilo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+.reference-input-wrap {
+    position: relative;
+}
 input, textarea, select, .reference-input {
     width: 100%; border-radius: 18px; border: 1px solid rgba(123,44,255,0.4); background: var(--bg-input); color: #f1ece5; padding: 12px 14px; outline: none; font-size: 0.92rem;
 }
 
 .reference-input { padding-right: 54px; font-size: 1rem; }
+.secondary-button--pabilo {
+    min-height: 46px;
+    padding-inline: 16px;
+    white-space: nowrap;
+}
 .icon-button--clear {
     position: absolute;
     right: 12px;
@@ -383,6 +397,62 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
 .summary-grid div { background: #1a1a1d; border: 1px solid var(--stroke-soft); border-radius: 16px; padding: 12px; }
 .summary-grid strong { font-size: 1.2rem; }
+
+.pabilo-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+}
+.pabilo-panel[data-state="success"] {
+    border-color: rgba(88, 214, 141, 0.45);
+    background: rgba(24, 92, 54, 0.24);
+}
+.pabilo-panel[data-state="warning"] {
+    border-color: rgba(255, 196, 80, 0.45);
+    background: rgba(87, 61, 12, 0.24);
+}
+.pabilo-panel[data-state="error"] {
+    border-color: rgba(255, 119, 119, 0.45);
+    background: rgba(88, 22, 33, 0.24);
+}
+.pabilo-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.pabilo-summary {
+    display: grid;
+    gap: 8px;
+}
+.pabilo-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.18);
+    font-size: 0.8rem;
+}
+.pabilo-line strong {
+    color: #e9d38c;
+}
+.pabilo-raw {
+    margin: 0;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(0,0,0,0.22);
+    color: #ddd7cf;
+    font-size: 0.74rem;
+    overflow: auto;
+    max-height: 220px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
 
 .cart-item, .history-card, .entity-card, .service-card, .history-row {
     background: #18181b; border: 1px solid rgba(255,255,255,0.08); border-radius: 18px;
@@ -968,6 +1038,13 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 }
 .admin-user-form { width: 100%; }
 .admin-user-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.admin-checkbox-line {
+    min-height: 46px;
+    padding: 0 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+}
 .access-editor { display: flex; flex-direction: column; gap: 12px; width: 100%; }
 .access-block { display: flex; flex-direction: column; gap: 8px; }
 .checkbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
@@ -1119,6 +1196,10 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
     }
 
     .sidebar { gap: 14px; }
+
+    .reference-shell--with-pabilo {
+        grid-template-columns: 1fr;
+    }
 
     .seven-day-strip,
     .history-detail-items {

@@ -79,6 +79,26 @@
         </form>
     </div>
 
+    {% if current_user.is_admin %}
+    <section class="workspace-panel form-stack">
+        <div class="panel-heading-heavy">
+            <h3>PABILO</h3>
+            <span class="soft-chip">{{ 'CONFIGURADO' if pabilo_ready else 'PENDIENTE' }}</span>
+        </div>
+        <div class="two-column">
+            <div>
+                <label for="pabilo_user_bank_id">USERBANKID</label>
+                <input id="pabilo_user_bank_id" name="pabilo_user_bank_id" type="text" form="profile_form" value="{{ current_user.pabilo_user_bank_id or '' }}" placeholder="ub_...">
+            </div>
+            <div>
+                <label for="pabilo_api_key">API KEY</label>
+                <input id="pabilo_api_key" name="pabilo_api_key" type="text" form="profile_form" value="{{ current_user.pabilo_api_key or '' }}" placeholder="pk_...">
+            </div>
+        </div>
+        <small class="helper-text">Estas credenciales se usan para la verificación manual de pagos desde el dashboard.</small>
+    </section>
+    {% endif %}
+
     <form method="post" action="/profile/request-days" class="workspace-panel form-stack">
         <div class="panel-heading-heavy">
             <h3>SOLICITAR DIAS AL ADMIN</h3>

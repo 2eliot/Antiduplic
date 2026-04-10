@@ -56,6 +56,7 @@
                         <span class="tag">Dias: {{ user.days_left }}</span>
                         <span class="tag">{{ user.timezone_name }}</span>
                         <span class="tag">{{ 'Activo' if user.is_active else 'Inactivo' }}</span>
+                        <span class="tag">{{ 'Pabilo ON' if user.pabilo_enabled else 'Pabilo OFF' }}</span>
                     </div>
                     <span class="catalog-toggle">Editar</span>
                 </div>
@@ -82,6 +83,10 @@
                     <div class="entity-form-grid admin-user-grid">
                         <input name="new_password" type="password" minlength="6" placeholder="Nueva contraseña opcional">
                         <input name="confirm_password" type="password" minlength="6" placeholder="Confirmar nueva contraseña">
+                        <label class="checkbox-line admin-checkbox-line">
+                            <input name="pabilo_enabled" type="checkbox" value="true"{% if user.pabilo_enabled %} checked{% endif %}>
+                            <span>Permitir consulta Pabilo en dashboard</span>
+                        </label>
                     </div>
                     <small class="helper-text">Si el usuario olvidó su contraseña, coloca una nueva y confirma. Si dejas ambos campos vacíos, solo se actualizan sus datos.</small>
                     <div class="table-actions">

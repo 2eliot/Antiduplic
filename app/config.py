@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     app_port: int = 8000
     gunicorn_workers: int = 2
     gunicorn_timeout: int = 60
+    pabilo_base_url: str = "https://api.pabilo.app"
+    pabilo_timeout: int = 30
 
     initial_admin_username: str = "admin"
     initial_admin_full_name: str = "Administrador Antiduplic"

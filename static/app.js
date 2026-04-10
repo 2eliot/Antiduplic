@@ -86,6 +86,13 @@ function setupDashboard() {
     const closeDuplicateModal = document.getElementById("close_duplicate_modal");
     const clearReferenceButton = document.getElementById("clear_reference_button");
     const recentSalesList = document.getElementById("recent_sales_list");
+    const verifyPabiloButton = document.getElementById("verify_pabilo_button");
+    const pabiloResultPanel = document.getElementById("pabilo_result_panel");
+    const pabiloResultTitle = document.getElementById("pabilo_result_title");
+    const pabiloResultBadge = document.getElementById("pabilo_result_badge");
+    const pabiloResultMessage = document.getElementById("pabilo_result_message");
+    const pabiloResultSummary = document.getElementById("pabilo_result_summary");
+    const pabiloResultRaw = document.getElementById("pabilo_result_raw");
     const catalog = JSON.parse(catalogElement.textContent || "[]");
 
     const state = {
@@ -94,12 +101,14 @@ function setupDashboard() {
         cart: [],
         forceSevenValidation: false,
         duplicateStatus: null,
+        pabiloResult: null,
     };
 
     bindChoiceGroup("payment-methods", paymentInput, (value) => {
         state.selectedPaymentMethodId = Number(value);
         state.selectedServiceId = 0;
         state.cart = [];
+        clearPabiloResult();
         renderServiceChoices();
         renderCart();
         if (referenceInput.value.trim()) {
@@ -244,7 +253,65 @@ function setupDashboard() {
                 forceSevenButton.classList.add("is-hidden");
             }
             state.forceSevenValidation = false;
+            clearPabiloResult();
         }
+    }
+
+    function clearPabiloResult() {
+        state.pabiloResult = null;
+        if (!pabiloResultPanel) {
+            return;
+        }
+        pabiloResultPanel.classList.add("is-hidden");
+        pabiloResultPanel.dataset.state = "";
+        if (pabiloResultTitle) {
+            pabiloResultTitle.textContent = "Consulta Pabilo";
+        }
+        if (pabiloResultBadge) {
+            pabiloResultBadge.textContent = "Sin consulta";
+        }
+        if (pabiloResultMessage) {
+            pabiloResultMessage.textContent = "";
+        }
+        if (pabiloResultSummary) {
+            pabiloResultSummary.innerHTML = "";
+        }
+        if (pabiloResultRaw) {
+            pabiloResultRaw.textContent = "";
+        }
+    }
+
+    function renderPabiloResult(result) {
+        if (!pabiloResultPanel) {
+            return;
+        }
+
+        state.pabiloResult = result;
+        pabiloResultPanel.classList.remove("is-hidden");
+        pabiloResultPanel.dataset.state = result.ok ? (result.found ? (result.verified ? "success" : "warning") : "neutral") : "error";
+        pabiloResultTitle.textContent = result.found ? "Pago consultado en Pabilo" : "Respuesta de Pabilo";
+        pabiloResultBadge.textContent = result.found ? (result.verified ? "Verificado" : "Encontrado") : "Sin coincidencia";
+        pabiloResultMessage.textContent = result.message || "";
+
+        const payment = result.payment || {};
+        const summaryLines = [];
+        if (payment.reference) {
+            summaryLines.push(`<div class="pabilo-line"><strong>Referencia</strong><span>${escapeHtml(payment.reference)}</span></div>`);
+        }
+        if (payment.amount_paid_value) {
+            summaryLines.push(`<div class="pabilo-line"><strong>Monto</strong><span>${escapeHtml(payment.amount_paid_currency || "BS")} ${escapeHtml(payment.amount_paid_value)}</span></div>`);
+        }
+        if (payment.status) {
+            summaryLines.push(`<div class="pabilo-line"><strong>Estado</strong><span>${escapeHtml(payment.status)}</span></div>`);
+        }
+        if (payment.verification_id) {
+            summaryLines.push(`<div class="pabilo-line"><strong>ID</strong><span>${escapeHtml(payment.verification_id)}</span></div>`);
+        }
+        if (!summaryLines.length) {
+            summaryLines.push("<div class='pabilo-line'><strong>Resultado</strong><span>Sin datos normalizados para mostrar.</span></div>");
+        }
+        pabiloResultSummary.innerHTML = summaryLines.join("");
+        pabiloResultRaw.textContent = JSON.stringify(result.response || result, null, 2);
     }
 
     function resetReferenceField() {
@@ -301,6 +368,7 @@ function setupDashboard() {
     let debounceTimer = null;
     referenceInput.addEventListener("input", () => {
         normalizeReference();
+        clearPabiloResult();
         window.clearTimeout(debounceTimer);
         debounceTimer = window.setTimeout(checkReference, 350);
     });
@@ -374,6 +442,42 @@ function setupDashboard() {
         }
     }
 
+    if (verifyPabiloButton) {
+        verifyPabiloButton.addEventListener("click", async () => {
+            const reference = referenceInput.value.trim();
+            if (!reference) {
+                showFeedback("Debes colocar la referencia antes de consultar Pabilo.", "error");
+                return;
+            }
+
+            verifyPabiloButton.disabled = true;
+            renderPabiloResult({ ok: true, found: false, verified: false, message: "Consultando Pabilo...", response: {} });
+            try {
+                const response = await fetch("/api/pabilo/verify-reference", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reference }),
+                });
+                const body = await response.json();
+                if (!response.ok) {
+                    renderPabiloResult({ ok: false, found: false, verified: false, message: body.detail || "No se pudo consultar Pabilo.", response: body });
+                    showFeedback(body.detail || "No se pudo consultar Pabilo.", "error");
+                    verifyPabiloButton.disabled = false;
+                    return;
+                }
+
+                renderPabiloResult(body);
+                if (body.payment && body.payment.amount_paid_value) {
+                    showFeedback(`Monto capturado desde Pabilo: Bs ${body.payment.amount_paid_value}.`, body.verified ? "success" : "error");
+                }
+            } catch (error) {
+                renderPabiloResult({ ok: false, found: false, verified: false, message: "No se pudo completar la consulta a Pabilo.", response: { error: String(error) } });
+                showFeedback("No se pudo completar la consulta a Pabilo.", "error");
+            }
+            verifyPabiloButton.disabled = false;
+        });
+    }
+
     registerButton.addEventListener("click", async () => {
         if (!state.cart.length) {
             showFeedback("Debes agregar al menos un paquete al pedido.", "error");
@@ -392,6 +496,16 @@ function setupDashboard() {
             items: state.cart.map((item) => ({ package_id: item.packageId })),
         };
 
+        if (state.pabiloResult && state.pabiloResult.payment && state.pabiloResult.payment.reference === referenceInput.value.trim()) {
+            if (state.pabiloResult.payment.amount_paid_value && state.pabiloResult.payment.amount_paid_currency) {
+                payload.amount_paid_value = state.pabiloResult.payment.amount_paid_value;
+                payload.amount_paid_currency = state.pabiloResult.payment.amount_paid_currency;
+            }
+            if (state.pabiloResult.payment.verification_id) {
+                payload.notes = [payload.notes, `Pabilo ID: ${state.pabiloResult.payment.verification_id}`].filter(Boolean).join(" | ");
+            }
+        }
+
         const response = await fetch("/api/sales", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -407,6 +521,7 @@ function setupDashboard() {
 
         state.cart = [];
         state.forceSevenValidation = false;
+        clearPabiloResult();
         notesInput.value = "";
         resetReferenceField();
         renderCart();
@@ -424,6 +539,7 @@ function setupDashboard() {
     renderServiceChoices();
     renderCart();
     normalizeReference();
+    clearPabiloResult();
 }
 
 function bindChoiceGroup(groupName, input, callback) {
