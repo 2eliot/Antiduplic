@@ -288,6 +288,10 @@ def catalog_name_exists(db: Session, model, user: User, name: str, *, exclude_id
     return db.scalar(statement) is not None
 
 
+def consume_flash_message(request: Request, key: str) -> Optional[str]:
+    return request.session.pop(key, None)
+
+
 def user_can_manage_catalog(user: User) -> bool:
     return user.is_admin or calculate_days_left(user.subscription_ends_at, user.timezone_name) > 0
 
@@ -668,8 +672,7 @@ def payment_methods_page(
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
 ):
     methods = get_managed_payment_methods(db, current_user)
-    error_key = request.query_params.get("error")
-    error_message = "Ya existe un método de pago con ese nombre." if error_key == "duplicate-name" else None
+    error_message = consume_flash_message(request, "payment_methods_error")
     return templates.TemplateResponse(
         "payment_methods.html",
         {
@@ -682,6 +685,7 @@ def payment_methods_page(
 
 @app.post("/payment-methods")
 def create_payment_method(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
@@ -692,7 +696,8 @@ def create_payment_method(
     owner_user_id = current_user.id
     normalized_name = name.strip()
     if catalog_name_exists(db, PaymentMethod, current_user, normalized_name):
-        return RedirectResponse("/payment-methods?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+        request.session["payment_methods_error"] = "Ya existe un método de pago con ese nombre."
+        return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
     method = PaymentMethod(name=normalized_name, owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
     db.add(method)
     try:
@@ -702,13 +707,15 @@ def create_payment_method(
         db.commit()
     except IntegrityError:
         db.rollback()
-        return RedirectResponse("/payment-methods?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+        request.session["payment_methods_error"] = "Ya existe un método de pago con ese nombre."
+        return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/payment-methods/{method_id}/update")
 def update_payment_method(
     method_id: int,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
@@ -719,7 +726,8 @@ def update_payment_method(
     method = get_managed_payment_method(db, current_user, method_id)
     normalized_name = name.strip()
     if catalog_name_exists(db, PaymentMethod, current_user, normalized_name, exclude_id=method.id):
-        return RedirectResponse("/payment-methods?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+        request.session["payment_methods_error"] = "Ya existe un método de pago con ese nombre."
+        return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
     method.name = normalized_name
     method.notes = notes.strip() or None
     method.display_order = display_order
@@ -731,7 +739,8 @@ def update_payment_method(
         db.commit()
     except IntegrityError:
         db.rollback()
-        return RedirectResponse("/payment-methods?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+        request.session["payment_methods_error"] = "Ya existe un método de pago con ese nombre."
+        return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -757,8 +766,7 @@ def services_page(
 ):
     setting = get_setting(db)
     services = get_managed_services(db, current_user)
-    error_key = request.query_params.get("error")
-    error_message = "Ya existe un servicio con ese nombre." if error_key == "duplicate-name" else None
+    error_message = consume_flash_message(request, "services_error")
     return templates.TemplateResponse(
         "services.html",
         {
@@ -772,6 +780,7 @@ def services_page(
 
 @app.post("/services")
 def create_service(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
@@ -782,7 +791,8 @@ def create_service(
     owner_user_id = current_user.id
     normalized_name = name.strip()
     if catalog_name_exists(db, Service, current_user, normalized_name):
-        return RedirectResponse("/services?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+        request.session["services_error"] = "Ya existe un servicio con ese nombre."
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
     service = Service(name=normalized_name, owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
     db.add(service)
     try:
@@ -792,13 +802,15 @@ def create_service(
         db.commit()
     except IntegrityError:
         db.rollback()
-        return RedirectResponse("/services?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+        request.session["services_error"] = "Ya existe un servicio con ese nombre."
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/services/{service_id}/update")
 def update_service(
     service_id: int,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
@@ -809,7 +821,8 @@ def update_service(
     service = get_managed_service(db, current_user, service_id)
     normalized_name = name.strip()
     if catalog_name_exists(db, Service, current_user, normalized_name, exclude_id=service.id):
-        return RedirectResponse("/services?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+        request.session["services_error"] = "Ya existe un servicio con ese nombre."
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
     service.name = normalized_name
     service.notes = notes.strip() or None
     service.display_order = display_order
@@ -821,7 +834,8 @@ def update_service(
         db.commit()
     except IntegrityError:
         db.rollback()
-        return RedirectResponse("/services?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
+        request.session["services_error"] = "Ya existe un servicio con ese nombre."
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
 
 

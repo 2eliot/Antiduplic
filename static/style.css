@@ -430,11 +430,18 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     justify-content: space-between;
     gap: 14px;
     cursor: pointer;
+    position: relative;
 }
 .collapsible-summary--panel,
-.collapsible-summary--card { padding: 18px; }
+.collapsible-summary--card {
+    padding: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0));
+}
 .collapsible-summary--subpanel,
-.collapsible-summary--subcard { padding: 14px 16px; }
+.collapsible-summary--subcard {
+    padding: 14px 16px;
+    background: linear-gradient(180deg, rgba(123,44,255,0.06), rgba(255,255,255,0));
+}
 .collapsible-summary--card h3,
 .collapsible-summary--subcard strong,
 .collapsible-summary--subpanel strong { margin: 0; }
@@ -447,13 +454,25 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     margin-left: auto;
 }
 .collapsible-chevron {
-    color: #d8d0c8;
-    font-size: 0.95rem;
-    transition: transform 140ms ease;
+    width: 34px;
+    height: 34px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 999px;
+    border: 1px solid rgba(155, 90, 255, 0.24);
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.12), rgba(123,44,255,0.18));
+    color: #f2ece5;
+    font-size: 0.9rem;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
 }
 .collapsible-panel[open] > .collapsible-summary .collapsible-chevron,
 .collapsible-subpanel[open] > .collapsible-summary .collapsible-chevron,
-.collapsible-subcard[open] > .collapsible-summary .collapsible-chevron { transform: rotate(180deg); }
+.collapsible-subcard[open] > .collapsible-summary .collapsible-chevron {
+    transform: rotate(180deg) scale(1.02);
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), rgba(123,44,255,0.32));
+    border-color: rgba(155, 90, 255, 0.45);
+}
 .collapsible-content {
     display: flex;
     flex-direction: column;
@@ -466,6 +485,12 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     background: #18181b;
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 18px;
+}
+.collapsible-panel:hover > .collapsible-summary .collapsible-chevron,
+.collapsible-subpanel:hover > .collapsible-summary .collapsible-chevron,
+.collapsible-subcard:hover > .collapsible-summary .collapsible-chevron {
+    border-color: rgba(155, 90, 255, 0.38);
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.16), rgba(123,44,255,0.24));
 }
 .collapsible-subpanel > .collapsible-content,
 .collapsible-subcard > .collapsible-content { padding: 0 16px 16px; }
