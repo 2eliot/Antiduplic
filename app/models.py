@@ -45,12 +45,14 @@ class PaymentMethod(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(80))
     owner_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    currency_code: Mapped[str] = mapped_column(String(3), default="BS")
     notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     sales: Mapped[list[Sale]] = relationship(back_populates="payment_method")
+    services: Mapped[list[Service]] = relationship(back_populates="payment_method")
     user_access: Mapped[list[UserPaymentMethod]] = relationship(back_populates="payment_method", cascade="all, delete-orphan")
 
 
@@ -61,11 +63,13 @@ class Service(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(80))
     owner_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    payment_method_id: Mapped[Optional[int]] = mapped_column(ForeignKey("payment_methods.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    payment_method: Mapped[Optional[PaymentMethod]] = relationship(back_populates="services")
     packages: Mapped[list[Package]] = relationship(back_populates="service")
 
 

@@ -86,16 +86,16 @@ def seed_database(session: Session) -> None:
     session.flush()
 
     payment_methods = [
-        PaymentMethod(name="Bancamiga", owner_user_id=admin.id, notes="Banco principal para recargas", display_order=1, is_default=True),
-        PaymentMethod(name="Binance", owner_user_id=admin.id, notes="Transferencias cripto", display_order=2),
-        PaymentMethod(name="Pago Movil", owner_user_id=admin.id, notes="Pagos nacionales", display_order=3),
+        PaymentMethod(name="Bancamiga", owner_user_id=admin.id, currency_code="BS", notes="Banco principal para recargas", display_order=1, is_default=True),
+        PaymentMethod(name="Binance", owner_user_id=admin.id, currency_code="USD", notes="Transferencias cripto", display_order=2),
+        PaymentMethod(name="Pago Movil", owner_user_id=admin.id, currency_code="BS", notes="Pagos nacionales", display_order=3),
     ]
     session.add_all(payment_methods)
 
     services = [
-        Service(name="Free Fire", owner_user_id=admin.id, notes="Diamantes y membresias", display_order=1, is_default=True),
-        Service(name="Mobile Legends", owner_user_id=admin.id, notes="Recargas rapidas", display_order=2),
-        Service(name="Call of Duty Mobile", owner_user_id=admin.id, notes="Packs en USD y Bs", display_order=3),
+        Service(name="Free Fire", owner_user_id=admin.id, payment_method_id=payment_methods[0].id, notes="Diamantes y membresias", display_order=1, is_default=True),
+        Service(name="Mobile Legends", owner_user_id=admin.id, payment_method_id=payment_methods[2].id, notes="Recargas rapidas", display_order=2),
+        Service(name="Call of Duty Mobile", owner_user_id=admin.id, payment_method_id=payment_methods[1].id, notes="Packs en USD y Bs", display_order=3),
     ]
     session.add_all(services)
 

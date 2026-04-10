@@ -41,6 +41,7 @@ SUPPORTED_TIMEZONES = [
     "America/Lima",
     "UTC",
 ]
+SUPPORTED_CURRENCIES = {"USD", "BS"}
 
 
 class SaleItemPayload(BaseModel):
@@ -70,10 +71,12 @@ def ensure_database_features() -> None:
         },
         "payment_methods": {
             "owner_user_id": "INTEGER",
+            "currency_code": "VARCHAR(3) NOT NULL DEFAULT 'BS'",
             "notes": "VARCHAR(255)",
         },
         "services": {
             "owner_user_id": "INTEGER",
+            "payment_method_id": "INTEGER",
             "notes": "VARCHAR(255)",
         },
         "packages": {
@@ -89,12 +92,13 @@ def ensure_database_features() -> None:
     sqlite_catalog_tables = {
         "payment_methods": {
             "constraint_name": "uq_payment_methods_owner_name",
-            "columns": ["id", "name", "owner_user_id", "notes", "display_order", "is_default", "is_active"],
+            "columns": ["id", "name", "owner_user_id", "currency_code", "notes", "display_order", "is_default", "is_active"],
             "ddl": """
                 CREATE TABLE payment_methods__new (
                     id INTEGER NOT NULL PRIMARY KEY,
                     name VARCHAR(80) NOT NULL,
                     owner_user_id INTEGER,
+                    currency_code VARCHAR(3) NOT NULL DEFAULT 'BS',
                     notes VARCHAR(255),
                     display_order INTEGER NOT NULL,
                     is_default BOOLEAN NOT NULL,
@@ -106,18 +110,20 @@ def ensure_database_features() -> None:
         },
         "services": {
             "constraint_name": "uq_services_owner_name",
-            "columns": ["id", "name", "owner_user_id", "notes", "display_order", "is_default", "is_active"],
+            "columns": ["id", "name", "owner_user_id", "payment_method_id", "notes", "display_order", "is_default", "is_active"],
             "ddl": """
                 CREATE TABLE services__new (
                     id INTEGER NOT NULL PRIMARY KEY,
                     name VARCHAR(80) NOT NULL,
                     owner_user_id INTEGER,
+                    payment_method_id INTEGER,
                     notes VARCHAR(255),
                     display_order INTEGER NOT NULL,
                     is_default BOOLEAN NOT NULL,
                     is_active BOOLEAN NOT NULL,
                     CONSTRAINT uq_services_owner_name UNIQUE (owner_user_id, name),
-                    FOREIGN KEY(owner_user_id) REFERENCES users (id)
+                    FOREIGN KEY(owner_user_id) REFERENCES users (id),
+                    FOREIGN KEY(payment_method_id) REFERENCES payment_methods (id)
                 )
             """,
         },
@@ -204,6 +210,7 @@ async def lifespan(_: FastAPI):
             seed_database(session)
         else:
             ensure_initial_admin(session)
+        normalize_service_payment_links(session)
     yield
 
 
@@ -230,6 +237,30 @@ def get_effective_exchange_rate(current_user: User, setting: AppSetting) -> Deci
     if current_user.exchange_rate_bs is not None:
         return money(Decimal(current_user.exchange_rate_bs))
     return money(Decimal(setting.exchange_rate_bs))
+
+
+def normalize_currency_code(raw_value: str) -> str:
+    normalized_value = (raw_value or "").strip().upper()
+    if normalized_value not in SUPPORTED_CURRENCIES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La moneda debe ser USD o BS.")
+    return normalized_value
+
+
+def normalize_service_payment_links(db: Session) -> None:
+    services_without_method = db.scalars(select(Service).where(Service.payment_method_id.is_(None))).all()
+    changed = False
+    for service in services_without_method:
+        statement = select(PaymentMethod).where(PaymentMethod.is_active.is_(True))
+        if service.owner_user_id is None:
+            statement = statement.where(PaymentMethod.owner_user_id.is_(None))
+        else:
+            statement = statement.where(PaymentMethod.owner_user_id == service.owner_user_id)
+        method = db.scalar(statement.order_by(PaymentMethod.is_default.desc(), PaymentMethod.display_order, PaymentMethod.id))
+        if method:
+            service.payment_method_id = method.id
+            changed = True
+    if changed:
+        db.commit()
 
 
 def package_price_breakdown(package: Package, exchange_rate: Decimal) -> dict:
@@ -394,7 +425,7 @@ def get_managed_payment_methods(db: Session, user: User) -> list[PaymentMethod]:
 
 
 def get_managed_services(db: Session, user: User) -> list[Service]:
-    statement = apply_catalog_owner_filter(select(Service).options(joinedload(Service.packages)), Service.owner_user_id, user)
+    statement = apply_catalog_owner_filter(select(Service).options(joinedload(Service.packages), joinedload(Service.payment_method)), Service.owner_user_id, user)
     statement = statement.order_by(Service.display_order, Service.name)
     return db.scalars(statement).unique().all()
 
@@ -409,12 +440,19 @@ def get_managed_payment_method(db: Session, user: User, method_id: int) -> Payme
 
 
 def get_managed_service(db: Session, user: User, service_id: int) -> Service:
-    statement = select(Service).where(Service.id == service_id)
+    statement = select(Service).options(joinedload(Service.payment_method)).where(Service.id == service_id)
     statement = apply_catalog_owner_filter(statement, Service.owner_user_id, user)
     service = db.scalar(statement)
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado.")
     return service
+
+
+def get_managed_payment_method_for_service(db: Session, user: User, payment_method_id: int) -> PaymentMethod:
+    method = get_managed_payment_method(db, user, payment_method_id)
+    if not method.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El método de pago seleccionado está inactivo.")
+    return method
 
 
 def get_managed_package(db: Session, user: User, package_id: int) -> Package:
@@ -449,7 +487,7 @@ def get_accessible_services_and_packages(db: Session, user: User) -> tuple[list[
 
     service_statement = (
         select(Service)
-        .options(joinedload(Service.packages))
+        .options(joinedload(Service.packages), joinedload(Service.payment_method))
         .join(Service.packages)
         .where(Service.is_active.is_(True), Package.id.in_(package_ids))
     )
@@ -537,6 +575,7 @@ def serialize_catalog(services: list[Service], exchange_rate: Decimal, allowed_p
             "id": service.id,
             "name": service.name,
             "is_default": service.is_default,
+            "payment_method_id": service.payment_method_id,
             "packages": [
                 {
                     "id": package.id,
@@ -563,6 +602,7 @@ def sale_card_payload(sale: Sale) -> dict:
         "created_at": local_time.strftime("%d/%m/%Y %I:%M %p"),
         "created_day": local_time.strftime("%Y-%m-%d"),
         "payment_method": sale.payment_method.name,
+        "payment_method_currency": sale.payment_method.currency_code,
         "operator_username": sale.operator.username,
         "operator_email": sale.operator.email,
         "reference_raw": sale.reference_raw,
@@ -924,16 +964,24 @@ def create_payment_method(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
+    currency_code: str = Form("BS"),
     notes: str = Form(""),
     display_order: int = Form(0),
     is_default: bool = Form(False),
 ):
     owner_user_id = current_user.id
     normalized_name = name.strip()
+    normalized_currency = normalize_currency_code(currency_code)
     if catalog_name_exists(db, PaymentMethod, current_user, normalized_name):
         request.session["payment_methods_error"] = "Ya existe un método de pago con ese nombre."
         return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
-    method = PaymentMethod(name=normalized_name, owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
+    method = PaymentMethod(
+        name=normalized_name,
+        owner_user_id=owner_user_id,
+        currency_code=normalized_currency,
+        notes=notes.strip() or None,
+        display_order=display_order,
+    )
     db.add(method)
     try:
         db.flush()
@@ -954,16 +1002,19 @@ def update_payment_method(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
+    currency_code: str = Form("BS"),
     notes: str = Form(""),
     display_order: int = Form(0),
     is_default: bool = Form(False),
 ):
     method = get_managed_payment_method(db, current_user, method_id)
     normalized_name = name.strip()
+    normalized_currency = normalize_currency_code(currency_code)
     if catalog_name_exists(db, PaymentMethod, current_user, normalized_name, exclude_id=method.id):
         request.session["payment_methods_error"] = "Ya existe un método de pago con ese nombre."
         return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
     method.name = normalized_name
+    method.currency_code = normalized_currency
     method.notes = notes.strip() or None
     method.display_order = display_order
     if is_default:
@@ -1007,6 +1058,7 @@ def services_page(
         "services.html",
         {
             "services": services,
+            "payment_methods": get_managed_payment_methods(db, current_user),
             "exchange_rate": exchange_rate,
             "page_error": error_message,
             **layout_context(request, current_user),
@@ -1020,16 +1072,24 @@ def create_service(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
+    payment_method_id: int = Form(...),
     notes: str = Form(""),
     display_order: int = Form(0),
     is_default: bool = Form(False),
 ):
     owner_user_id = current_user.id
     normalized_name = name.strip()
+    payment_method = get_managed_payment_method_for_service(db, current_user, payment_method_id)
     if catalog_name_exists(db, Service, current_user, normalized_name):
         request.session["services_error"] = "Ya existe un servicio con ese nombre."
         return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
-    service = Service(name=normalized_name, owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
+    service = Service(
+        name=normalized_name,
+        owner_user_id=owner_user_id,
+        payment_method_id=payment_method.id,
+        notes=notes.strip() or None,
+        display_order=display_order,
+    )
     db.add(service)
     try:
         db.flush()
@@ -1050,16 +1110,19 @@ def update_service(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
+    payment_method_id: int = Form(...),
     notes: str = Form(""),
     display_order: int = Form(0),
     is_default: bool = Form(False),
 ):
     service = get_managed_service(db, current_user, service_id)
     normalized_name = name.strip()
+    payment_method = get_managed_payment_method_for_service(db, current_user, payment_method_id)
     if catalog_name_exists(db, Service, current_user, normalized_name, exclude_id=service.id):
         request.session["services_error"] = "Ya existe un servicio con ese nombre."
         return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
     service.name = normalized_name
+    service.payment_method_id = payment_method.id
     service.notes = notes.strip() or None
     service.display_order = display_order
     if is_default:
@@ -1588,7 +1651,12 @@ def create_sale(
         select(Package)
         .options(joinedload(Package.service))
         .join(Package.service)
-        .where(Package.id.in_(package_ids), Package.is_active.is_(True), Service.is_active.is_(True))
+        .where(
+            Package.id.in_(package_ids),
+            Package.is_active.is_(True),
+            Service.is_active.is_(True),
+            Service.payment_method_id == payment_method.id,
+        )
     )
     package_statement = apply_catalog_owner_filter(package_statement, Service.owner_user_id, current_user)
     packages = db.scalars(package_statement).unique().all()
@@ -1603,13 +1671,18 @@ def create_sale(
     expected_total_bs = money(sum(price_breakdowns[item.package_id]["bs"] for item in payload.items))
 
     if payload.amount_paid_value is None or not payload.amount_paid_currency:
-        amount_paid_value = expected_total_usd
-        amount_paid_currency = "USD"
-        amount_paid_usd = expected_total_usd
-        amount_paid_bs = expected_total_bs
+        amount_paid_currency = payment_method.currency_code
+        if amount_paid_currency == "BS":
+            amount_paid_value = expected_total_bs
+            amount_paid_usd = expected_total_usd
+            amount_paid_bs = expected_total_bs
+        else:
+            amount_paid_value = expected_total_usd
+            amount_paid_usd = expected_total_usd
+            amount_paid_bs = expected_total_bs
     else:
         amount_paid_value = money(payload.amount_paid_value)
-        amount_paid_currency = payload.amount_paid_currency
+        amount_paid_currency = normalize_currency_code(payload.amount_paid_currency)
         if amount_paid_currency == "USD":
             amount_paid_usd = amount_paid_value
             amount_paid_bs = money(amount_paid_value * exchange_rate)

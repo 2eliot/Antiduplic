@@ -35,7 +35,7 @@
                     class="choice-chip choice-chip--danger{% if method.is_default %} is-selected{% endif %}"
                     data-value="{{ method.id }}"
                     data-role="choice-button"
-                >{{ method.name }}</button>
+                >{{ method.name }} · {{ method.currency_code }}</button>
                 {% else %}
                 <p class="empty-state">No tienes métodos de pago asignados.</p>
                 {% endfor %}
@@ -54,19 +54,8 @@
 
         <div class="step-block">
             <div class="step-title"><span class="step-number">3</span><h3>Servicio</h3></div>
-            <div class="chip-grid chip-grid--dashboard" data-select-group="services">
-                {% for service in services %}
-                <button
-                    type="button"
-                    class="choice-chip choice-chip--danger{% if service.is_default %} is-selected{% endif %}"
-                    data-value="{{ service.id }}"
-                    data-role="choice-button"
-                >{{ loop.index }}. {{ service.name }}</button>
-                {% else %}
-                <p class="empty-state">No tienes servicios o paquetes asignados.</p>
-                {% endfor %}
-            </div>
-            <input type="hidden" id="service_id" value="{{ services[0].id if services else '' }}">
+            <div class="chip-grid chip-grid--dashboard" id="service_choice_group" data-select-group="services"></div>
+            <input type="hidden" id="service_id" value="">
         </div>
 
         <div class="step-block">

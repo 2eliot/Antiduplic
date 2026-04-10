@@ -89,24 +89,72 @@ function setupDashboard() {
     const catalog = JSON.parse(catalogElement.textContent || "[]");
 
     const state = {
+        selectedPaymentMethodId: Number(paymentInput.value),
         selectedServiceId: Number(serviceInput.value),
         cart: [],
         forceSevenValidation: false,
         duplicateStatus: null,
     };
 
-    bindChoiceGroup("payment-methods", paymentInput, () => {
+    bindChoiceGroup("payment-methods", paymentInput, (value) => {
+        state.selectedPaymentMethodId = Number(value);
+        state.selectedServiceId = 0;
+        state.cart = [];
+        renderServiceChoices();
+        renderCart();
         if (referenceInput.value.trim()) {
             checkReference();
         }
     });
-    bindChoiceGroup("services", serviceInput, (value) => {
-        state.selectedServiceId = Number(value);
+
+    function getServicesForSelectedMethod() {
+        return catalog.filter((service) => service.payment_method_id === state.selectedPaymentMethodId);
+    }
+
+    function renderServiceChoices() {
+        const group = document.getElementById("service_choice_group");
+        if (!group) {
+            return;
+        }
+
+        const availableServices = getServicesForSelectedMethod();
+        if (!availableServices.length) {
+            state.selectedServiceId = 0;
+            serviceInput.value = "";
+            group.innerHTML = "<p class='empty-state'>No tienes servicios o paquetes asignados para este método.</p>";
+            renderPackages();
+            return;
+        }
+
+        if (!availableServices.some((service) => service.id === state.selectedServiceId)) {
+            const defaultService = availableServices.find((service) => service.is_default) || availableServices[0];
+            state.selectedServiceId = defaultService.id;
+        }
+
+        serviceInput.value = String(state.selectedServiceId);
+        group.innerHTML = "";
+
+        availableServices.forEach((service, index) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `choice-chip choice-chip--danger${service.id === state.selectedServiceId ? " is-selected" : ""}`;
+            button.dataset.value = String(service.id);
+            button.dataset.role = "choice-button";
+            button.textContent = `${index + 1}. ${service.name}`;
+            button.addEventListener("click", () => {
+                state.selectedServiceId = service.id;
+                serviceInput.value = String(service.id);
+                renderServiceChoices();
+                renderPackages();
+            });
+            group.appendChild(button);
+        });
+
         renderPackages();
-    });
+    }
 
     function renderPackages() {
-        const activeService = catalog.find((service) => service.id === state.selectedServiceId) || catalog[0];
+        const activeService = getServicesForSelectedMethod().find((service) => service.id === state.selectedServiceId);
         if (!activeService) {
             packageList.innerHTML = "<p class='empty-state'>No hay paquetes activos.</p>";
             return;
@@ -373,7 +421,7 @@ function setupDashboard() {
         feedback.classList.remove("is-hidden");
     }
 
-    renderPackages();
+    renderServiceChoices();
     renderCart();
     normalizeReference();
 }
