@@ -1473,14 +1473,13 @@ def update_profile(
         normalized_pabilo_user_bank_id != (current_user.pabilo_user_bank_id or None)
         or normalized_pabilo_api_key != (current_user.pabilo_api_key or None)
     )
-    profile_changed = (
+    sensitive_profile_changed = (
         normalized_full_name != current_user.full_name
         or normalized_email != current_user.email
         or normalized_timezone != current_user.timezone_name
-        or pabilo_changed
     )
 
-    if profile_changed and not verify_password(current_password, current_user.password_hash):
+    if sensitive_profile_changed and not verify_password(current_password, current_user.password_hash):
         return templates.TemplateResponse(
             "profile.html",
             build_profile_context(request, db, current_user, profile_error="Debes confirmar tu contraseña actual para cambiar datos sensibles."),
