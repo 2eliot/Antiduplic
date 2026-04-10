@@ -15,7 +15,6 @@
         <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card admin-entity-card"{% if admin_feedback and admin_feedback.target_user_id == user.id %} open{% endif %}>
             <summary class="collapsible-summary collapsible-summary--card">
                 <div class="catalog-card__copy">
-                    <span class="catalog-card__label">Editar usuario</span>
                     <h3>{{ user.username }}</h3>
                     <p>{{ user.full_name }} · {{ user.email }}</p>
                 </div>
@@ -91,7 +90,6 @@
         {% for item in extension_requests %}
         <article class="workspace-panel entity-card entity-card--stack admin-entity-card admin-entity-card--request">
             <div class="catalog-card__copy">
-                <span class="catalog-card__label">Solicitud</span>
                 <h3>{{ item.user.username }}</h3>
                 <p>{{ item.requested_days }} dias · {{ item.message }} · {{ item.created_at.strftime('%d/%m/%Y %I:%M %p') }}</p>
             </div>

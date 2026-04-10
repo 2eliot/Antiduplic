@@ -9,7 +9,6 @@
 <details class="workspace-panel collapsible-panel collapsible-panel--hero form-stack"{% if page_error %} open{% endif %}>
     <summary class="collapsible-summary collapsible-summary--panel">
         <div class="catalog-summary__copy">
-            <span class="catalog-summary__eyebrow">Crear servicio</span>
             <h3>Nuevo servicio</h3>
             <p class="helper-text">Organiza nuevos servicios sin abrir bloques innecesarios.</p>
         </div>
@@ -36,7 +35,6 @@
     <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card">
         <summary class="collapsible-summary collapsible-summary--card">
             <div class="catalog-card__copy">
-                <span class="catalog-card__label">Editar servicio</span>
                 <h3>{{ loop.index }}. {{ service.name }}</h3>
                 <p>{{ service.notes or 'Sin descripcion' }}</p>
             </div>
@@ -68,7 +66,6 @@
             <details class="collapsible-subpanel">
                 <summary class="collapsible-summary collapsible-summary--subpanel">
                     <div class="catalog-card__copy">
-                        <span class="catalog-card__label">Gestionar</span>
                         <strong>PAQUETES</strong>
                     </div>
                     <div class="collapsible-summary__meta">
@@ -80,7 +77,6 @@
                     <details class="collapsible-subcard">
                         <summary class="collapsible-summary collapsible-summary--subcard">
                             <div class="catalog-card__copy">
-                                <span class="catalog-card__label">Editar paquete</span>
                                 <strong>{{ package.name }}</strong>
                                 <p class="helper-text">{{ 'Precio en Bs ' ~ ('%.2f'|format(package.bs_price)) if package.bs_price is not none else 'Precio en USD ' ~ ('%.2f'|format(package.usd_price)) }}</p>
                             </div>
@@ -113,7 +109,6 @@
                     <details class="collapsible-subcard collapsible-subcard--new">
                         <summary class="collapsible-summary collapsible-summary--subcard">
                             <div class="catalog-card__copy">
-                                <span class="catalog-card__label">Crear paquete</span>
                                 <strong>AGREGAR PAQUETE</strong>
                                 <p class="helper-text">Crea un nuevo paquete sin expandir todo el servicio.</p>
                             </div>
