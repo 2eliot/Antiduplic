@@ -7,6 +7,7 @@ import requests
 
 
 PABILO_DEFAULT_MOVEMENT_TYPE = "GENERIC"
+REFERENCE_ONLY_FIELD_NAMES = {"REFERENCE_NUMBER"}
 PABILO_ACCEPTED_STATUSES = {
     "verified",
     "approve",
@@ -55,9 +56,22 @@ def _coerce_decimal_amount(value: Any) -> Optional[Decimal]:
 
 
 def _request_pabilo_verify(url: str, api_key: str, payload: dict[str, Any], timeout: int):
+    response, data = _request_pabilo_json("POST", url, api_key, timeout, payload)
+    if response is None:
+        return None, {
+            "ok": False,
+            "found": False,
+            "verified": False,
+            "message": data.get("message") or "No se pudo consultar Pabilo.",
+        }
+    return response, data
+
+
+def _request_pabilo_json(method: str, url: str, api_key: str, timeout: int, payload: Optional[dict[str, Any]] = None):
     try:
-        response = requests.post(
-            url,
+        response = requests.request(
+            method=method,
+            url=url,
             json=payload,
             headers={
                 "Content-Type": "application/json",
@@ -66,11 +80,11 @@ def _request_pabilo_verify(url: str, api_key: str, payload: dict[str, Any], time
             timeout=timeout,
         )
     except requests.exceptions.Timeout:
-        return None, {"ok": False, "found": False, "verified": False, "message": "Pabilo no respondió a tiempo."}
+        return None, {"ok": False, "message": "Pabilo no respondió a tiempo."}
     except requests.exceptions.ConnectionError:
-        return None, {"ok": False, "found": False, "verified": False, "message": "No se pudo conectar con Pabilo."}
+        return None, {"ok": False, "message": "No se pudo conectar con Pabilo."}
     except Exception as exc:
-        return None, {"ok": False, "found": False, "verified": False, "message": f"Error consultando Pabilo: {exc}"}
+        return None, {"ok": False, "message": f"Error consultando Pabilo: {exc}"}
 
     try:
         data = response.json()
@@ -127,6 +141,7 @@ def _normalize_payment_data(reference: str, payload_data: dict[str, Any], full_d
     is_verified = status_value in PABILO_ACCEPTED_STATUSES or verified_flag
     normalized_reference = str(
         payment_data.get("bank_reference")
+        or payment_data.get("bank_reference_id")
         or payment_data.get("reference")
         or payload_data.get("bank_reference")
         or reference
@@ -142,6 +157,60 @@ def _normalize_payment_data(reference: str, payload_data: dict[str, Any], full_d
         "is_new": bool(payload_data.get("is_new")),
         "raw": payment_data,
     }
+
+
+def _normalize_required_fields(fields_required: Any) -> list[str]:
+    normalized_fields: list[str] = []
+    for field in fields_required or []:
+        if isinstance(field, dict):
+            field_name = str(field.get("name") or "").strip().upper()
+        else:
+            field_name = str(field or "").strip().upper()
+        if field_name:
+            normalized_fields.append(field_name)
+    return normalized_fields
+
+
+def _get_user_bank_configuration(api_key: str, user_bank_id: str, base_url: str, timeout: int) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]]]:
+    url = f"{base_url.rstrip('/')}/me/usersbank"
+    response, data = _request_pabilo_json("GET", url, api_key, timeout)
+    if response is None:
+        return None, data
+    if response.status_code == 401:
+        return None, {"ok": False, "message": "La API key de Pabilo es inválida o está inactiva.", "response": data}
+    if response.status_code >= 400:
+        return None, {
+            "ok": False,
+            "message": data.get("message") or data.get("error") or f"Pabilo devolvió HTTP {response.status_code} al consultar las cuentas.",
+            "response": data,
+        }
+
+    user_banks = data.get("user_banks") or []
+    selected_bank = next((bank for bank in user_banks if str(bank.get("id") or "").strip() == user_bank_id), None)
+    if not selected_bank:
+        return None, {
+            "ok": False,
+            "message": "El UserBankId configurado no aparece entre las cuentas disponibles de Pabilo.",
+            "response": data,
+        }
+    return selected_bank, None
+
+
+def _select_reference_only_verification(user_bank: dict[str, Any]) -> tuple[Optional[dict[str, Any]], list[dict[str, Any]]]:
+    available_types: list[dict[str, Any]] = []
+    for verification_type in user_bank.get("verifications_types_available") or []:
+        verification_id = str(verification_type.get("id") or "").strip().upper()
+        required_fields = _normalize_required_fields(verification_type.get("fields_required"))
+        available_types.append({
+            "id": verification_id,
+            "required_fields": required_fields,
+        })
+        if set(required_fields).issubset(REFERENCE_ONLY_FIELD_NAMES):
+            return {
+                "id": verification_id or PABILO_DEFAULT_MOVEMENT_TYPE,
+                "required_fields": required_fields,
+            }, available_types
+    return None, available_types
 
 
 def verify_pabilo_reference(
@@ -160,9 +229,29 @@ def verify_pabilo_reference(
     if not user_bank_id:
         return {"ok": False, "found": False, "verified": False, "message": "Falta configurar el UserBankId de Pabilo."}
 
+    user_bank, configuration_error = _get_user_bank_configuration(api_key, user_bank_id, base_url, timeout)
+    if configuration_error:
+        return {
+            "ok": False,
+            "found": False,
+            "verified": False,
+            **configuration_error,
+        }
+
+    selected_verification, available_types = _select_reference_only_verification(user_bank or {})
+    if not selected_verification:
+        return {
+            "ok": False,
+            "found": False,
+            "verified": False,
+            "message": "La cuenta Pabilo configurada no permite verificación solo por referencia. Esta cuenta exige datos adicionales del pagador o un tipo de movimiento específico.",
+            "available_verification_types": available_types,
+            "provider": user_bank.get("provider") if user_bank else None,
+        }
+
     payload = {
         "bank_reference": normalized_reference,
-        "movement_type": PABILO_DEFAULT_MOVEMENT_TYPE,
+        "movement_type": selected_verification["id"],
     }
     url = f"{base_url.rstrip('/')}/userbankpayment/{user_bank_id}/betaserio"
     response, data = _request_pabilo_verify(url, api_key, payload, timeout)
