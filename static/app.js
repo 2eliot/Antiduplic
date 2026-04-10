@@ -30,6 +30,27 @@ function omitPabiloNoise(value) {
     );
 }
 
+function formatPabiloDateTime(rawValue, timeZone) {
+    if (!rawValue) {
+        return null;
+    }
+
+    const parsedDate = new Date(rawValue);
+    if (Number.isNaN(parsedDate.getTime())) {
+        return null;
+    }
+
+    return new Intl.DateTimeFormat("es-VE", {
+        timeZone: timeZone || undefined,
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+    }).format(parsedDate);
+}
+
 function setupAuthPanels() {
     const root = document.querySelector("[data-auth-root]");
     if (!root) {
@@ -82,6 +103,8 @@ function setupDashboard() {
     if (!root) {
         return;
     }
+
+    const dashboardTimeZone = root.dataset.timezone || "UTC";
 
     const catalogElement = document.getElementById("catalog-data");
     const paymentInput = document.getElementById("payment_method_id");
@@ -316,7 +339,10 @@ function setupDashboard() {
         if (payment.status) {
             summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Estado</div><div class="pabilo-text-value">${escapeHtml(payment.status)}</div></div>`);
         }
-        if (payment.payment_date && payment.payment_time) {
+        const localizedPaymentDateTime = formatPabiloDateTime(payment.payment_datetime_raw, dashboardTimeZone);
+        if (localizedPaymentDateTime) {
+            summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Fecha/Hora</div><div class="pabilo-text-value">${escapeHtml(localizedPaymentDateTime)}</div></div>`);
+        } else if (payment.payment_date && payment.payment_time) {
             summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Fecha/Hora</div><div class="pabilo-text-value">${escapeHtml(payment.payment_date)} ${escapeHtml(payment.payment_time)}</div></div>`);
         } else if (payment.payment_date) {
             summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Fecha</div><div class="pabilo-text-value">${escapeHtml(payment.payment_date)}</div></div>`);
