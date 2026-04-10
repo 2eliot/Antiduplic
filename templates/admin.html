@@ -10,15 +10,13 @@
     <div class="panel-heading-heavy">
         <h3>USUARIOS</h3>
     </div>
-    <div class="history-stack">
+    <div class="cards-grid cards-grid--mosaic cards-grid--stretch">
         {% for user in admin_users %}
-        <details class="history-card entity-card--stack collapsible-subpanel"{% if admin_feedback and admin_feedback.target_user_id == user.id %} open{% endif %}>
-            <summary class="collapsible-summary collapsible-summary--subpanel">
-                <div>
-                    <div class="history-card__top">
-                        <strong>{{ user.username }}</strong>
-                        <span>{{ 'Activo' if user.is_active else 'Inactivo' }} · {{ user.days_left }} dias</span>
-                    </div>
+        <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card admin-entity-card"{% if admin_feedback and admin_feedback.target_user_id == user.id %} open{% endif %}>
+            <summary class="collapsible-summary collapsible-summary--card">
+                <div class="catalog-card__copy">
+                    <span class="catalog-card__label">Editar usuario</span>
+                    <h3>{{ user.username }}</h3>
                     <p>{{ user.full_name }} · {{ user.email }}</p>
                 </div>
                 <div class="collapsible-summary__meta">
@@ -59,7 +57,7 @@
                     </div>
                 </form>
 
-                <div class="history-stack">
+                <div class="history-stack history-stack--compact">
                     {% for sale in user.recent_sales %}
                     <article class="history-card">
                         <div class="history-card__top">
@@ -89,14 +87,17 @@
     <div class="panel-heading-heavy">
         <h3>SOLICITUDES DE DÍAS</h3>
     </div>
-    <div class="history-stack">
+    <div class="cards-grid cards-grid--mosaic cards-grid--stretch">
         {% for item in extension_requests %}
-        <article class="history-card entity-card--stack">
-            <div class="history-card__top">
-                <strong>{{ item.user.username }}</strong>
-                <span>{{ 'Aprobado' if item.status == 'approved' else 'Rechazado' if item.status == 'rejected' else 'Pendiente' }}</span>
+        <article class="workspace-panel entity-card entity-card--stack admin-entity-card admin-entity-card--request">
+            <div class="catalog-card__copy">
+                <span class="catalog-card__label">Solicitud</span>
+                <h3>{{ item.user.username }}</h3>
+                <p>{{ item.requested_days }} dias · {{ item.message }} · {{ item.created_at.strftime('%d/%m/%Y %I:%M %p') }}</p>
             </div>
-            <p>{{ item.requested_days }} dias · {{ item.message }} · {{ item.created_at.strftime('%d/%m/%Y %I:%M %p') }}</p>
+            <div class="tag-row">
+                <span class="tag">{{ 'Aprobado' if item.status == 'approved' else 'Rechazado' if item.status == 'rejected' else 'Pendiente' }}</span>
+            </div>
             {% if item.status == 'pending' %}
             <div class="table-actions">
                 <form method="post" action="/admin/requests/{{ item.id }}/review">

@@ -8,14 +8,15 @@
 
 <details class="workspace-panel collapsible-panel collapsible-panel--hero form-stack"{% if page_error %} open{% endif %}>
     <summary class="collapsible-summary collapsible-summary--panel">
-        <div class="collapsible-copy">
-            <span class="collapsible-kicker">Crear método de pago</span>
-            <div class="panel-heading-heavy panel-heading-heavy--tight">
-                <h3>NUEVO MÉTODO</h3>
-                <span class="soft-chip">PLEGABLE</span>
-            </div>
+        <div class="catalog-summary__copy">
+            <span class="catalog-summary__eyebrow">Crear método</span>
+            <h3>Nuevo método de pago</h3>
+            <p class="helper-text">Agrega un método nuevo sin saturar la vista principal.</p>
         </div>
-        <span class="collapsible-chevron" aria-hidden="true">▾</span>
+        <div class="catalog-summary__aside">
+            <span class="soft-chip">Formulario</span>
+            <span class="collapsible-chevron" aria-hidden="true">▾</span>
+        </div>
     </summary>
     <div class="collapsible-content">
         {% if page_error %}
@@ -35,13 +36,10 @@
     {% for method in payment_methods %}
     <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card">
         <summary class="collapsible-summary collapsible-summary--card">
-            <div class="service-card__left collapsible-copy">
-                <span class="collapsible-kicker">Editar método</span>
-                <div class="entity-card__icon">▭</div>
-                <div>
-                    <h3>{{ method.name }}</h3>
-                    <p>{{ method.notes or 'Sin notas' }}</p>
-                </div>
+            <div class="catalog-card__copy">
+                <span class="catalog-card__label">Editar método</span>
+                <h3>{{ method.name }}</h3>
+                <p>{{ method.notes or 'Sin notas' }}</p>
             </div>
             <div class="collapsible-summary__meta">
                 <div class="tag-row">

@@ -8,14 +8,15 @@
 
 <details class="workspace-panel collapsible-panel collapsible-panel--hero form-stack"{% if page_error %} open{% endif %}>
     <summary class="collapsible-summary collapsible-summary--panel">
-        <div class="collapsible-copy">
-            <span class="collapsible-kicker">Crear servicio o paquete base</span>
-            <div class="panel-heading-heavy panel-heading-heavy--tight">
-                <h3>NUEVO SERVICIO</h3>
-                <span class="soft-chip">PLEGABLE</span>
-            </div>
+        <div class="catalog-summary__copy">
+            <span class="catalog-summary__eyebrow">Crear servicio</span>
+            <h3>Nuevo servicio</h3>
+            <p class="helper-text">Organiza nuevos servicios sin abrir bloques innecesarios.</p>
         </div>
-        <span class="collapsible-chevron" aria-hidden="true">▾</span>
+        <div class="catalog-summary__aside">
+            <span class="soft-chip">Formulario</span>
+            <span class="collapsible-chevron" aria-hidden="true">▾</span>
+        </div>
     </summary>
     <div class="collapsible-content">
         {% if page_error %}
@@ -35,13 +36,10 @@
     {% for service in services %}
     <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card">
         <summary class="collapsible-summary collapsible-summary--card">
-            <div class="service-card__left collapsible-copy">
-                <span class="collapsible-kicker">Editar servicio</span>
-                <div class="entity-card__icon">⌘</div>
-                <div>
-                    <h3>{{ loop.index }}. {{ service.name }}</h3>
-                    <p>{{ service.notes or 'Sin descripcion' }}</p>
-                </div>
+            <div class="catalog-card__copy">
+                <span class="catalog-card__label">Editar servicio</span>
+                <h3>{{ loop.index }}. {{ service.name }}</h3>
+                <p>{{ service.notes or 'Sin descripcion' }}</p>
             </div>
             <div class="collapsible-summary__meta">
                 <div class="tag-row">
@@ -70,8 +68,8 @@
 
             <details class="collapsible-subpanel">
                 <summary class="collapsible-summary collapsible-summary--subpanel">
-                    <div class="collapsible-copy">
-                        <span class="collapsible-kicker">Gestionar paquetes</span>
+                    <div class="catalog-card__copy">
+                        <span class="catalog-card__label">Gestionar</span>
                         <strong>PAQUETES</strong>
                     </div>
                     <div class="collapsible-summary__meta">
@@ -83,8 +81,8 @@
                     {% for package in service.packages | sort(attribute='display_order') %}
                     <details class="collapsible-subcard">
                         <summary class="collapsible-summary collapsible-summary--subcard">
-                            <div class="collapsible-copy">
-                                <span class="collapsible-kicker">Editar paquete</span>
+                            <div class="catalog-card__copy">
+                                <span class="catalog-card__label">Editar paquete</span>
                                 <strong>{{ package.name }}</strong>
                                 <p class="helper-text">{{ 'Precio en Bs ' ~ ('%.2f'|format(package.bs_price)) if package.bs_price is not none else 'Precio en USD ' ~ ('%.2f'|format(package.usd_price)) }}</p>
                             </div>
@@ -116,8 +114,8 @@
 
                     <details class="collapsible-subcard collapsible-subcard--new">
                         <summary class="collapsible-summary collapsible-summary--subcard">
-                            <div class="collapsible-copy">
-                                <span class="collapsible-kicker">Crear paquete</span>
+                            <div class="catalog-card__copy">
+                                <span class="catalog-card__label">Crear paquete</span>
                                 <strong>AGREGAR PAQUETE</strong>
                                 <p class="helper-text">Crea un nuevo paquete sin expandir todo el servicio.</p>
                             </div>
