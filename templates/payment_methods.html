@@ -10,6 +10,9 @@
     <div class="panel-heading-heavy">
         <h3>NUEVO MÉTODO</h3>
     </div>
+    {% if page_error %}
+    <div class="alert alert--error">{{ page_error }}</div>
+    {% endif %}
     <form method="post" action="/payment-methods" class="entity-form-grid">
         <input name="name" type="text" placeholder="Nombre" required>
         <input name="notes" type="text" placeholder="Notas o uso recomendado">

@@ -10,6 +10,9 @@
     <div class="panel-heading-heavy">
         <h3>NUEVO SERVICIO</h3>
     </div>
+    {% if page_error %}
+    <div class="alert alert--error">{{ page_error }}</div>
+    {% endif %}
     <form method="post" action="/services" class="entity-form-grid">
         <input name="name" type="text" placeholder="Nombre del servicio" required>
         <input name="notes" type="text" placeholder="Notas o categoria">

@@ -175,6 +175,12 @@ def set_service_default(db: Session, selected_id: int, owner_user_id: Optional[i
         service.is_default = service.id == selected_id
 
 
+def apply_catalog_owner_filter(statement, owner_column, user: User):
+    if user.is_admin:
+        return statement.where(or_(owner_column == user.id, owner_column.is_(None)))
+    return statement.where(owner_column == user.id)
+
+
 def user_can_manage_catalog(user: User) -> bool:
     return user.is_admin or calculate_days_left(user.subscription_ends_at, user.timezone_name) > 0
 
@@ -186,17 +192,20 @@ def get_catalog_manager_user(current_user: Annotated[User, Depends(get_current_u
 
 
 def get_managed_payment_methods(db: Session, user: User) -> list[PaymentMethod]:
-    statement = select(PaymentMethod).where(PaymentMethod.owner_user_id == user.id).order_by(PaymentMethod.display_order, PaymentMethod.name)
+    statement = apply_catalog_owner_filter(select(PaymentMethod), PaymentMethod.owner_user_id, user)
+    statement = statement.order_by(PaymentMethod.display_order, PaymentMethod.name)
     return db.scalars(statement).all()
 
 
 def get_managed_services(db: Session, user: User) -> list[Service]:
-    statement = select(Service).options(joinedload(Service.packages)).where(Service.owner_user_id == user.id).order_by(Service.display_order, Service.name)
+    statement = apply_catalog_owner_filter(select(Service).options(joinedload(Service.packages)), Service.owner_user_id, user)
+    statement = statement.order_by(Service.display_order, Service.name)
     return db.scalars(statement).unique().all()
 
 
 def get_managed_payment_method(db: Session, user: User, method_id: int) -> PaymentMethod:
-    statement = select(PaymentMethod).where(PaymentMethod.id == method_id, PaymentMethod.owner_user_id == user.id)
+    statement = select(PaymentMethod).where(PaymentMethod.id == method_id)
+    statement = apply_catalog_owner_filter(statement, PaymentMethod.owner_user_id, user)
     method = db.scalar(statement)
     if not method:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Metodo no encontrado.")
@@ -204,7 +213,8 @@ def get_managed_payment_method(db: Session, user: User, method_id: int) -> Payme
 
 
 def get_managed_service(db: Session, user: User, service_id: int) -> Service:
-    statement = select(Service).where(Service.id == service_id, Service.owner_user_id == user.id)
+    statement = select(Service).where(Service.id == service_id)
+    statement = apply_catalog_owner_filter(statement, Service.owner_user_id, user)
     service = db.scalar(statement)
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado.")
@@ -213,7 +223,8 @@ def get_managed_service(db: Session, user: User, service_id: int) -> Service:
 
 def get_managed_package(db: Session, user: User, package_id: int) -> Package:
     statement = select(Package).options(joinedload(Package.service)).where(Package.id == package_id)
-    statement = statement.join(Package.service).where(Service.owner_user_id == user.id)
+    statement = statement.join(Package.service)
+    statement = apply_catalog_owner_filter(statement, Service.owner_user_id, user)
     package = db.scalar(statement)
     if not package:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paquete no encontrado.")
@@ -221,31 +232,33 @@ def get_managed_package(db: Session, user: User, package_id: int) -> Package:
 
 
 def get_accessible_payment_methods(db: Session, user: User) -> list[PaymentMethod]:
-    return db.scalars(
-        select(PaymentMethod)
-        .where(PaymentMethod.owner_user_id == user.id, PaymentMethod.is_active.is_(True))
-        .order_by(PaymentMethod.display_order, PaymentMethod.name)
-    ).all()
+    statement = select(PaymentMethod).where(PaymentMethod.is_active.is_(True))
+    statement = apply_catalog_owner_filter(statement, PaymentMethod.owner_user_id, user)
+    statement = statement.order_by(PaymentMethod.display_order, PaymentMethod.name)
+    return db.scalars(statement).all()
 
 
 def get_accessible_services_and_packages(db: Session, user: User) -> tuple[list[Service], set[int]]:
+    package_statement = (
+        select(Package.id)
+        .join(Package.service)
+        .where(Service.is_active.is_(True), Package.is_active.is_(True))
+    )
+    package_statement = apply_catalog_owner_filter(package_statement, Service.owner_user_id, user)
     package_ids = set(
-        db.scalars(
-            select(Package.id)
-            .join(Package.service)
-            .where(Service.owner_user_id == user.id, Service.is_active.is_(True), Package.is_active.is_(True))
-        ).all()
+        db.scalars(package_statement).all()
     )
     if not package_ids:
         return [], set()
 
-    services = db.scalars(
+    service_statement = (
         select(Service)
         .options(joinedload(Service.packages))
         .join(Service.packages)
         .where(Service.is_active.is_(True), Package.id.in_(package_ids))
-        .order_by(Service.display_order)
-    ).unique().all()
+    )
+    service_statement = apply_catalog_owner_filter(service_statement, Service.owner_user_id, user)
+    services = db.scalars(service_statement.order_by(Service.display_order)).unique().all()
     return services, package_ids
 
 
@@ -262,7 +275,9 @@ def calculate_days_left(subscription_ends_at: datetime, timezone_name: str) -> i
     return max(delta.days, 0)
 
 
-def user_can_operate(days_left: int, payment_methods: list[PaymentMethod], allowed_package_ids: set[int]) -> bool:
+def user_can_operate(user: User, days_left: int, payment_methods: list[PaymentMethod], allowed_package_ids: set[int]) -> bool:
+    if user.is_admin:
+        return bool(payment_methods) and bool(allowed_package_ids)
     return days_left > 0 and bool(payment_methods) and bool(allowed_package_ids)
 
 
@@ -515,7 +530,7 @@ def dashboard(
     services, allowed_package_ids = get_accessible_services_and_packages(db, current_user)
     setting = get_setting(db)
     days_left = calculate_days_left(current_user.subscription_ends_at, current_user.timezone_name)
-    can_operate = user_can_operate(days_left, payment_methods, allowed_package_ids)
+    can_operate = user_can_operate(current_user, days_left, payment_methods, allowed_package_ids)
     recent_sales = db.scalars(
         select(Sale)
         .options(joinedload(Sale.items), joinedload(Sale.payment_method), joinedload(Sale.operator))
@@ -546,10 +561,13 @@ def payment_methods_page(
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
 ):
     methods = get_managed_payment_methods(db, current_user)
+    error_key = request.query_params.get("error")
+    error_message = "Ya existe un método de pago con ese nombre." if error_key == "duplicate-name" else None
     return templates.TemplateResponse(
         "payment_methods.html",
         {
             "payment_methods": methods,
+            "page_error": error_message,
             **layout_context(request, current_user),
         },
     )
@@ -564,13 +582,17 @@ def create_payment_method(
     display_order: int = Form(0),
     is_default: bool = Form(False),
 ):
-    owner_user_id = None if current_user.is_admin else current_user.id
+    owner_user_id = current_user.id
     method = PaymentMethod(name=name.strip(), owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
     db.add(method)
-    db.flush()
-    if is_default:
-        set_payment_method_default(db, method.id, owner_user_id)
-    db.commit()
+    try:
+        db.flush()
+        if is_default:
+            set_payment_method_default(db, method.id, owner_user_id)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return RedirectResponse("/payment-methods?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -592,7 +614,11 @@ def update_payment_method(
         set_payment_method_default(db, method.id, method.owner_user_id)
     elif method.is_default:
         method.is_default = False
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return RedirectResponse("/payment-methods?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -618,11 +644,14 @@ def services_page(
 ):
     setting = get_setting(db)
     services = get_managed_services(db, current_user)
+    error_key = request.query_params.get("error")
+    error_message = "Ya existe un servicio con ese nombre." if error_key == "duplicate-name" else None
     return templates.TemplateResponse(
         "services.html",
         {
             "services": services,
             "exchange_rate": Decimal(setting.exchange_rate_bs),
+            "page_error": error_message,
             **layout_context(request, current_user),
         },
     )
@@ -637,13 +666,17 @@ def create_service(
     display_order: int = Form(0),
     is_default: bool = Form(False),
 ):
-    owner_user_id = None if current_user.is_admin else current_user.id
+    owner_user_id = current_user.id
     service = Service(name=name.strip(), owner_user_id=owner_user_id, notes=notes.strip() or None, display_order=display_order)
     db.add(service)
-    db.flush()
-    if is_default:
-        set_service_default(db, service.id, owner_user_id)
-    db.commit()
+    try:
+        db.flush()
+        if is_default:
+            set_service_default(db, service.id, owner_user_id)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return RedirectResponse("/services?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -665,7 +698,11 @@ def update_service(
         set_service_default(db, service.id, service.owner_user_id)
     elif service.is_default:
         service.is_default = False
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return RedirectResponse("/services?error=duplicate-name", status_code=status.HTTP_303_SEE_OTHER)
     return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -1058,12 +1095,11 @@ def create_sale(
     days_left = calculate_days_left(current_user.subscription_ends_at, current_user.timezone_name)
     allowed_payment_methods = get_accessible_payment_methods(db, current_user)
     _, allowed_package_ids = get_accessible_services_and_packages(db, current_user)
-    if not user_can_operate(days_left, allowed_payment_methods, allowed_package_ids):
+    if not user_can_operate(current_user, days_left, allowed_payment_methods, allowed_package_ids):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tu cuenta necesita días activos y accesos asignados para registrar ventas.")
 
     payment_method_statement = select(PaymentMethod).where(PaymentMethod.id == payload.payment_method_id, PaymentMethod.is_active.is_(True))
-    if not current_user.is_admin:
-        payment_method_statement = payment_method_statement.where(PaymentMethod.owner_user_id == current_user.id)
+    payment_method_statement = apply_catalog_owner_filter(payment_method_statement, PaymentMethod.owner_user_id, current_user)
     payment_method = db.scalar(payment_method_statement)
     if not payment_method:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Método de pago no válido.")
@@ -1075,8 +1111,7 @@ def create_sale(
         .join(Package.service)
         .where(Package.id.in_(package_ids), Package.is_active.is_(True), Service.is_active.is_(True))
     )
-    if not current_user.is_admin:
-        package_statement = package_statement.where(Service.owner_user_id == current_user.id)
+    package_statement = apply_catalog_owner_filter(package_statement, Service.owner_user_id, current_user)
     packages = db.scalars(package_statement).unique().all()
     package_map = {package.id: package for package in packages}
     if len(package_map) != len(package_ids):
