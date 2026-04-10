@@ -347,6 +347,7 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 
 .cards-grid { display: grid; gap: 16px; }
 .cards-grid--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cards-grid--mosaic { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
 .entity-card, .service-card { padding: 17px; display: flex; align-items: center; gap: 12px; }
 .service-card { justify-content: space-between; }
 .service-card__left { display: flex; gap: 12px; align-items: center; }
@@ -418,6 +419,13 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 .package-editor--new { padding-top: 6px; border-top: 1px solid var(--stroke-soft); }
 .panel-heading-heavy--tight { margin-bottom: 0; }
 .collapsible-panel { padding: 0; overflow: hidden; }
+.collapsible-panel--hero {
+    border-radius: 30px;
+    background:
+        radial-gradient(circle at top left, rgba(123,44,255,0.12), transparent 28%),
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+        var(--bg-panel);
+}
 .collapsible-panel > summary,
 .collapsible-subpanel > summary,
 .collapsible-subcard > summary { list-style: none; }
@@ -431,6 +439,25 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     gap: 14px;
     cursor: pointer;
     position: relative;
+}
+.collapsible-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+.collapsible-kicker {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    color: #f0d6ff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 .collapsible-summary--panel,
 .collapsible-summary--card {
@@ -447,6 +474,13 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 .collapsible-summary--subpanel strong { margin: 0; }
 .collapsible-summary--card p,
 .collapsible-summary--subcard p { margin: 4px 0 0; }
+.collapsible-summary--card {
+    min-height: 124px;
+    align-items: flex-start;
+}
+.collapsible-summary--panel {
+    min-height: 104px;
+}
 .collapsible-summary__meta {
     display: flex;
     align-items: center;
@@ -492,6 +526,11 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     border-color: rgba(155, 90, 255, 0.38);
     background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.16), rgba(123,44,255,0.24));
 }
+.collapsible-panel:hover > .collapsible-summary,
+.collapsible-subpanel:hover > .collapsible-summary,
+.collapsible-subcard:hover > .collapsible-summary {
+    background: linear-gradient(180deg, rgba(123,44,255,0.08), rgba(255,255,255,0));
+}
 .collapsible-subpanel > .collapsible-content,
 .collapsible-subcard > .collapsible-content { padding: 0 16px 16px; }
 .collapsible-subcard--new {
@@ -526,6 +565,16 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
     .collapsible-summary__meta { align-items: flex-start; flex-direction: column; }
     .collapsible-summary__meta { width: 100%; margin-left: 0; }
     .admin-user-grid { grid-template-columns: 1fr; }
+}
+
+@media (min-width: 1201px) {
+    .cards-grid--mosaic .collapsible-panel--card:nth-child(3n + 1) {
+        transform: translateY(8px);
+    }
+
+    .cards-grid--mosaic .collapsible-panel--card:nth-child(3n + 2) {
+        transform: translateY(-6px);
+    }
 }
 
 @media (max-width: 860px) {

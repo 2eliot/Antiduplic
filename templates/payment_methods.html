@@ -6,11 +6,14 @@
     <span class="soft-chip">CRUD ACTIVO</span>
 </section>
 
-<details class="workspace-panel collapsible-panel form-stack"{% if page_error %} open{% endif %}>
+<details class="workspace-panel collapsible-panel collapsible-panel--hero form-stack"{% if page_error %} open{% endif %}>
     <summary class="collapsible-summary collapsible-summary--panel">
-        <div class="panel-heading-heavy panel-heading-heavy--tight">
-            <h3>NUEVO MÉTODO</h3>
-            <span class="soft-chip">PLEGABLE</span>
+        <div class="collapsible-copy">
+            <span class="collapsible-kicker">Crear método de pago</span>
+            <div class="panel-heading-heavy panel-heading-heavy--tight">
+                <h3>NUEVO MÉTODO</h3>
+                <span class="soft-chip">PLEGABLE</span>
+            </div>
         </div>
         <span class="collapsible-chevron" aria-hidden="true">▾</span>
     </summary>
@@ -28,11 +31,12 @@
     </div>
 </details>
 
-<section class="cards-grid cards-grid--two cards-grid--stretch">
+<section class="cards-grid cards-grid--mosaic cards-grid--stretch">
     {% for method in payment_methods %}
     <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card">
         <summary class="collapsible-summary collapsible-summary--card">
-            <div class="service-card__left">
+            <div class="service-card__left collapsible-copy">
+                <span class="collapsible-kicker">Editar método</span>
                 <div class="entity-card__icon">▭</div>
                 <div>
                     <h3>{{ method.name }}</h3>
