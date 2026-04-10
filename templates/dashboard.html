@@ -101,40 +101,6 @@
 
         <article class="workspace-panel">
             <div class="panel-heading-heavy">
-                <h3>Ventas ultimos 7 dias</h3>
-                <span class="soft-chip">{{ recent_sales_summary.range_label }}</span>
-            </div>
-            <div class="stats-grid stats-grid--compact">
-                <article class="stat-card">
-                    <div class="stat-title">Ventas</div>
-                    <div class="stat-value">{{ recent_sales_summary.sales_count }}</div>
-                    <div class="stat-subtitle">Operaciones guardadas</div>
-                </article>
-                <article class="stat-card">
-                    <div class="stat-title">Total USD</div>
-                    <div class="stat-value">${{ recent_sales_summary.total_usd }}</div>
-                    <div class="stat-subtitle">Cobrado en 7 dias</div>
-                </article>
-                <article class="stat-card">
-                    <div class="stat-title">Ticket promedio</div>
-                    <div class="stat-value">${{ recent_sales_summary.avg_ticket_usd }}</div>
-                    <div class="stat-subtitle">Promedio por venta</div>
-                </article>
-            </div>
-            <div class="seven-day-strip">
-                {% for day in recent_sales_summary.days %}
-                <article class="seven-day-pill">
-                    <strong>{{ day.label }}</strong>
-                    <span>{{ day.sales_count }} ventas</span>
-                    <span>USD {{ day.total_usd }}</span>
-                </article>
-                {% endfor %}
-            </div>
-            <div class="helper-text helper-text--panel">Mejor dia: {{ recent_sales_summary.best_day.label }} · USD {{ recent_sales_summary.best_day.total_usd }} · {{ recent_sales_summary.best_day.sales_count }} ventas</div>
-        </article>
-
-        <article class="workspace-panel">
-            <div class="panel-heading-heavy">
                 <h3>Registros recientes</h3>
                 <span class="soft-chip">{{ timezone_name }}</span>
             </div>

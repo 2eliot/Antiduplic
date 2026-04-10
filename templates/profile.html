@@ -23,6 +23,8 @@
                 <label for="avatar_file">CAPTURA O FOTO DE PERFIL</label>
                 <input id="avatar_file" name="avatar_file" type="file" form="profile_form" accept="image/*">
                 <small class="helper-text">Sube una imagen directa desde tu galería. Formatos: JPG, PNG, GIF o WEBP.</small>
+                <button type="submit" form="profile_form" class="secondary-button full-width">ACTUALIZAR IMAGEN</button>
+                <small class="helper-text">Para guardar la imagen también debes colocar tu contraseña actual en el formulario.</small>
             </div>
 
             <form method="post" action="/profile" class="form-stack" id="profile_form" enctype="multipart/form-data">

@@ -843,17 +843,6 @@ def dashboard(
         .order_by(Sale.created_at.desc())
         .limit(5)
     ).unique().all()
-    _, _, summary_start_utc, summary_end_utc = last_n_local_day_bounds(current_user.timezone_name, 7)
-    seven_day_sales = db.scalars(
-        select(Sale)
-        .options(joinedload(Sale.items), joinedload(Sale.payment_method), joinedload(Sale.operator))
-        .where(
-            Sale.operator_id == current_user.id,
-            Sale.created_at >= summary_start_utc,
-            Sale.created_at < summary_end_utc,
-        )
-        .order_by(Sale.created_at.desc())
-    ).unique().all()
 
     context = {
         "payment_methods": payment_methods,
@@ -865,7 +854,6 @@ def dashboard(
         "has_access": bool(payment_methods and allowed_package_ids),
         "can_operate": can_operate,
         "recent_sales": [sale_card_payload(sale) for sale in recent_sales],
-        "recent_sales_summary": build_recent_sales_summary(seven_day_sales, current_user.timezone_name),
         **layout_context(request, current_user),
     }
     return templates.TemplateResponse("dashboard.html", context)
