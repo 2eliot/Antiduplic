@@ -427,19 +427,22 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 }
 .pabilo-summary {
     display: grid;
-    gap: 8px;
+    gap: 10px;
 }
-.pabilo-line {
+.pabilo-text-item {
     display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 8px 10px;
-    border-radius: 12px;
-    background: rgba(0,0,0,0.18);
-    font-size: 0.8rem;
+    flex-direction: column;
+    gap: 2px;
 }
-.pabilo-line strong {
+.pabilo-text-label {
     color: #e9d38c;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+.pabilo-text-value {
+    color: #f3efe7;
+    font-size: 0.95rem;
+    font-weight: 500;
 }
 .pabilo-raw {
     margin: 0;

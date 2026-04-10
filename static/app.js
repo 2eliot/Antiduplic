@@ -108,7 +108,6 @@ function setupDashboard() {
     const pabiloResultBadge = document.getElementById("pabilo_result_badge");
     const pabiloResultMessage = document.getElementById("pabilo_result_message");
     const pabiloResultSummary = document.getElementById("pabilo_result_summary");
-    const pabiloResultRaw = document.getElementById("pabilo_result_raw");
     const catalog = JSON.parse(catalogElement.textContent || "[]");
 
     const state = {
@@ -292,9 +291,6 @@ function setupDashboard() {
         if (pabiloResultSummary) {
             pabiloResultSummary.innerHTML = "";
         }
-        if (pabiloResultRaw) {
-            pabiloResultRaw.textContent = "";
-        }
     }
 
     function renderPabiloResult(result) {
@@ -312,28 +308,25 @@ function setupDashboard() {
         const payment = result.payment || {};
         const summaryLines = [];
         if (payment.reference) {
-            summaryLines.push(`<div class="pabilo-line"><strong>Referencia</strong><span>${escapeHtml(payment.reference)}</span></div>`);
+            summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Referencia</div><div class="pabilo-text-value">${escapeHtml(payment.reference)}</div></div>`);
         }
         if (payment.amount_paid_value) {
-            summaryLines.push(`<div class="pabilo-line"><strong>Monto</strong><span>${escapeHtml(payment.amount_paid_currency || "BS")} ${escapeHtml(payment.amount_paid_value)}</span></div>`);
+            summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Monto</div><div class="pabilo-text-value">${escapeHtml(payment.amount_paid_currency || "BS")} ${escapeHtml(payment.amount_paid_value)}</div></div>`);
         }
         if (payment.status) {
-            summaryLines.push(`<div class="pabilo-line"><strong>Estado</strong><span>${escapeHtml(payment.status)}</span></div>`);
+            summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Estado</div><div class="pabilo-text-value">${escapeHtml(payment.status)}</div></div>`);
         }
-        if (payment.payment_date) {
-            summaryLines.push(`<div class="pabilo-line"><strong>Fecha</strong><span>${escapeHtml(payment.payment_date)}</span></div>`);
-        }
-        if (payment.payment_time) {
-            summaryLines.push(`<div class="pabilo-line"><strong>Hora</strong><span>${escapeHtml(payment.payment_time)}</span></div>`);
-        }
-        if (payment.verification_id) {
-            summaryLines.push(`<div class="pabilo-line"><strong>ID</strong><span>${escapeHtml(payment.verification_id)}</span></div>`);
+        if (payment.payment_date && payment.payment_time) {
+            summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Fecha/Hora</div><div class="pabilo-text-value">${escapeHtml(payment.payment_date)} ${escapeHtml(payment.payment_time)}</div></div>`);
+        } else if (payment.payment_date) {
+            summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Fecha</div><div class="pabilo-text-value">${escapeHtml(payment.payment_date)}</div></div>`);
+        } else if (payment.payment_time) {
+            summaryLines.push(`<div class="pabilo-text-item"><div class="pabilo-text-label">Hora</div><div class="pabilo-text-value">${escapeHtml(payment.payment_time)}</div></div>`);
         }
         if (!summaryLines.length) {
-            summaryLines.push("<div class='pabilo-line'><strong>Resultado</strong><span>Sin datos normalizados para mostrar.</span></div>");
+            summaryLines.push("<div class='pabilo-text-item'><div class='pabilo-text-label'>Resultado</div><div class='pabilo-text-value'>Sin datos normalizados para mostrar.</div></div>");
         }
         pabiloResultSummary.innerHTML = summaryLines.join("");
-        pabiloResultRaw.textContent = JSON.stringify(omitPabiloNoise(result.response || result), null, 2);
     }
 
     function resetReferenceField() {
