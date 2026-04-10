@@ -25,6 +25,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    exchange_rate_bs: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     timezone_name: Mapped[str] = mapped_column(String(64), default="America/Caracas")
     subscription_ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

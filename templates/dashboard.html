@@ -22,6 +22,10 @@
 
 <div class="reference-layout" data-dashboard-root data-exchange-rate="{{ exchange_rate }}">
     <section class="workspace-panel workspace-panel--form form-stack compact-panel">
+        {% if exchange_rate_feedback %}
+        <div class="alert alert--success">{{ exchange_rate_feedback }}</div>
+        {% endif %}
+
         <div class="step-block">
             <div class="step-title"><span class="step-number">1</span><h3>Elige metodo de pago</h3></div>
             <div class="chip-grid chip-grid--dashboard" data-select-group="payment-methods">
@@ -86,6 +90,14 @@
                 <h3>Resumen del pedido</h3>
                 <span class="soft-chip">Tasa Bs {{ exchange_rate }}</span>
             </div>
+            <form class="form-stack" method="post" action="/dashboard/exchange-rate">
+                <label for="exchange_rate_bs">Editar tasa Bs</label>
+                <div class="two-column">
+                    <input id="exchange_rate_bs" name="exchange_rate_bs" type="number" min="0.01" step="0.01" value="{{ exchange_rate }}" required>
+                    <button type="submit" class="secondary-button">Guardar tasa</button>
+                </div>
+                <small class="helper-text">Solo se actualiza tu cuenta y todo tu historial registrado dentro de la web.</small>
+            </form>
             <div id="cart_items" class="stack-list"></div>
             <div class="summary-grid summary-grid--danger">
                 <div>

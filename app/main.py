@@ -66,6 +66,7 @@ def ensure_database_features() -> None:
     column_map = {
         "users": {
             "is_admin": "INTEGER NOT NULL DEFAULT 0" if sqlite_mode else "BOOLEAN NOT NULL DEFAULT FALSE",
+            "exchange_rate_bs": "NUMERIC(10, 2)",
         },
         "payment_methods": {
             "owner_user_id": "INTEGER",
@@ -225,6 +226,12 @@ def get_setting(db: Session) -> AppSetting:
     return setting
 
 
+def get_effective_exchange_rate(current_user: User, setting: AppSetting) -> Decimal:
+    if current_user.exchange_rate_bs is not None:
+        return money(Decimal(current_user.exchange_rate_bs))
+    return money(Decimal(setting.exchange_rate_bs))
+
+
 def package_price_breakdown(package: Package, exchange_rate: Decimal) -> dict:
     if package.bs_price is not None:
         bs_value = money(Decimal(package.bs_price))
@@ -242,6 +249,13 @@ def package_price_breakdown(package: Package, exchange_rate: Decimal) -> dict:
         "display_value": display_value,
         "display_currency": display_currency,
     }
+
+
+def recalculate_sale_exchange_totals(sale: Sale, exchange_rate: Decimal) -> None:
+    sale.amount_paid_bs = money(Decimal(sale.amount_paid_usd) * exchange_rate)
+    sale.expected_total_bs = money(Decimal(sale.expected_total_usd) * exchange_rate)
+    if sale.amount_paid_currency == "BS":
+        sale.amount_paid_value = sale.amount_paid_bs
 
 
 def apply_extension_days(user: User, days: int) -> None:
@@ -373,12 +387,6 @@ def user_can_manage_catalog(user: User) -> bool:
     return user.is_admin or calculate_days_left(user.subscription_ends_at, user.timezone_name) > 0
 
 
-def get_catalog_manager_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-    if not user_can_manage_catalog(current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Necesitas días activos para gestionar tu catálogo.")
-    return current_user
-
-
 def get_managed_payment_methods(db: Session, user: User) -> list[PaymentMethod]:
     statement = apply_catalog_owner_filter(select(PaymentMethod), PaymentMethod.owner_user_id, user)
     statement = statement.order_by(PaymentMethod.display_order, PaymentMethod.name)
@@ -484,6 +492,12 @@ def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]) 
 def get_admin_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo un administrador puede entrar aqui.")
+    return current_user
+
+
+def get_catalog_manager_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    if not user_can_manage_catalog(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Necesitas días activos para gestionar tu catálogo.")
     return current_user
 
 
@@ -834,6 +848,7 @@ def dashboard(
     payment_methods = get_accessible_payment_methods(db, current_user)
     services, allowed_package_ids = get_accessible_services_and_packages(db, current_user)
     setting = get_setting(db)
+    exchange_rate = get_effective_exchange_rate(current_user, setting)
     days_left = calculate_days_left(current_user.subscription_ends_at, current_user.timezone_name)
     can_operate = user_can_operate(current_user, days_left, payment_methods, allowed_package_ids)
     recent_sales = db.scalars(
@@ -843,12 +858,14 @@ def dashboard(
         .order_by(Sale.created_at.desc())
         .limit(5)
     ).unique().all()
+    exchange_rate_feedback = consume_flash_message(request, "dashboard_exchange_rate_feedback")
 
     context = {
         "payment_methods": payment_methods,
         "services": services,
-        "exchange_rate": f"{Decimal(setting.exchange_rate_bs):.2f}",
-        "catalog_json": json.dumps(serialize_catalog(services, Decimal(setting.exchange_rate_bs), allowed_package_ids if not current_user.is_admin else None)),
+        "exchange_rate": f"{exchange_rate:.2f}",
+        "exchange_rate_feedback": exchange_rate_feedback,
+        "catalog_json": json.dumps(serialize_catalog(services, exchange_rate, allowed_package_ids if not current_user.is_admin else None)),
         "timezone_name": current_user.timezone_name,
         "days_left": days_left,
         "has_access": bool(payment_methods and allowed_package_ids),
@@ -857,6 +874,30 @@ def dashboard(
         **layout_context(request, current_user),
     }
     return templates.TemplateResponse("dashboard.html", context)
+
+
+@app.post("/dashboard/exchange-rate")
+def update_dashboard_exchange_rate(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    exchange_rate_bs: Decimal = Form(...),
+):
+    next_rate = money(exchange_rate_bs)
+    if next_rate <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La tasa debe ser mayor a cero.")
+
+    current_user.exchange_rate_bs = next_rate
+
+    sales = db.scalars(select(Sale).where(Sale.operator_id == current_user.id)).all()
+    for sale in sales:
+        recalculate_sale_exchange_totals(sale, next_rate)
+
+    db.commit()
+    request.session["dashboard_exchange_rate_feedback"] = (
+        f"Tu tasa fue actualizada a Bs {next_rate:.2f}. Todo tu historial fue recalculado con ese valor."
+    )
+    return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/payment-methods")
@@ -959,13 +1000,14 @@ def services_page(
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
 ):
     setting = get_setting(db)
+    exchange_rate = get_effective_exchange_rate(current_user, setting)
     services = get_managed_services(db, current_user)
     error_message = consume_flash_message(request, "services_error")
     return templates.TemplateResponse(
         "services.html",
         {
             "services": services,
-            "exchange_rate": Decimal(setting.exchange_rate_bs),
+            "exchange_rate": exchange_rate,
             "page_error": error_message,
             **layout_context(request, current_user),
         },
@@ -1546,7 +1588,7 @@ def create_sale(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uno o más paquetes no existen.")
 
     setting = get_setting(db)
-    exchange_rate = Decimal(setting.exchange_rate_bs)
+    exchange_rate = get_effective_exchange_rate(current_user, setting)
     price_breakdowns = {package.id: package_price_breakdown(package, exchange_rate) for package in packages}
     expected_total_usd = money(sum(price_breakdowns[item.package_id]["usd"] for item in payload.items))
     expected_total_bs = money(sum(price_breakdowns[item.package_id]["bs"] for item in payload.items))
@@ -1597,6 +1639,7 @@ def create_sale(
         operator_id=current_user.id,
         notes=payload.notes,
     )
+    recalculate_sale_exchange_totals(sale, exchange_rate)
     db.add(sale)
     db.flush()
 
