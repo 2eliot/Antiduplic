@@ -4,6 +4,7 @@ import json
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 from typing import Annotated, Optional
 from zoneinfo import ZoneInfo, available_timezones
 
@@ -26,6 +27,7 @@ from app.services.duplicates import build_suffix, check_duplicate_reference, cur
 
 
 templates = Jinja2Templates(directory="templates")
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 SUPPORTED_TIMEZONES = [
     "America/Caracas",
     "America/Bogota",
@@ -419,6 +421,15 @@ def sidebar_context(user: User) -> dict:
             "username": user.username,
         }
     }
+
+
+def asset_url(filename: str) -> str:
+    asset_path = STATIC_DIR / filename
+    version = int(asset_path.stat().st_mtime_ns) if asset_path.exists() else 0
+    return f"/static/{filename}?v={version}"
+
+
+templates.env.globals["asset_url"] = asset_url
 
 
 def layout_context(request: Request, current_user: User) -> dict:

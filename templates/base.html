@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ asset_url('style.css') }}">
 </head>
 <body>
     <div class="shell{% if not current_user %} shell--auth{% endif %}">
@@ -57,6 +57,6 @@
             {% block content %}{% endblock %}
         </main>
     </div>
-    <script src="/static/app.js" defer></script>
+    <script src="{{ asset_url('app.js') }}" defer></script>
 </body>
 </html>
