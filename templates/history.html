@@ -2,14 +2,31 @@
 
 {% block content %}
 <section class="workspace-title workspace-title--row">
-    <h2>REGISTROS RECIENTES</h2>
+    <h2>PANEL DE HISTORIAL</h2>
     <a class="ghost-action" href="/history">LIMPIAR FILTROS</a>
 </section>
 
-<section class="workspace-panel form-stack">
+<section class="workspace-panel history-dashboard-panel form-stack" data-history-dashboard>
+    <div class="stats-header history-dashboard-header">
+        <div class="stats-title-section">
+            <h3 class="dashboard-title">Resumen de actividad</h3>
+            <p class="dashboard-subtitle">Filtros rápidos, métricas y serie diaria para auditar ventas sin salir del historial.</p>
+            <div class="user-details">Zona horaria operativa: {{ timezone_name }}</div>
+        </div>
+        <form class="history-filter-presets" method="get" action="/history">
+            <input type="hidden" name="q" value="{{ filters.q }}">
+            <input type="hidden" name="payment_method_id" value="{{ filters.payment_method_id or '' }}">
+            <input type="hidden" name="service_id" value="{{ filters.service_id or '' }}">
+            <button class="filter-btn{% if not filters.preset and not filters.date_from and not filters.date_to %} active{% endif %}" type="submit" name="preset" value="all">Todo</button>
+            <button class="filter-btn{% if filters.preset == 'today' %} active{% endif %}" type="submit" name="preset" value="today">Hoy</button>
+            <button class="filter-btn{% if filters.preset == 'yesterday' %} active{% endif %}" type="submit" name="preset" value="yesterday">Ayer</button>
+            <button class="filter-btn{% if filters.preset == 'last7' %} active{% endif %}" type="submit" name="preset" value="last7">7 días</button>
+            <button class="filter-btn{% if filters.preset == 'this_month' %} active{% endif %}" type="submit" name="preset" value="this_month">Mes</button>
+        </form>
+    </div>
+
     <form class="filters-line" method="get" action="/history">
-        <span class="helper-text helper-text--strong">ZONA HORARIA: {{ timezone_name }}</span>
-        <div class="filters-grid">
+        <div class="filters-grid filters-grid--history">
             <input type="text" name="q" value="{{ filters.q }}" placeholder="BUSCAR REFERENCIA O EMAIL...">
             <select name="payment_method_id">
                 <option value="">TODOS LOS METODOS</option>
@@ -23,36 +40,187 @@
                 <option value="{{ service.id }}"{% if filters.service_id == service.id %} selected{% endif %}>{{ service.name }}</option>
                 {% endfor %}
             </select>
-            <input type="date" name="sale_day" value="{{ filters.sale_day }}">
+            <input type="hidden" name="preset" value="{{ filters.preset }}">
         </div>
-        <button class="secondary-button" type="submit">Aplicar filtros</button>
+        <div class="custom-date-section">
+            <div class="date-group">
+                <span class="date-label">Desde</span>
+                <input class="date-input" type="date" name="date_from" value="{{ filters.date_from }}">
+            </div>
+            <div class="date-group">
+                <span class="date-label">Hasta</span>
+                <input class="date-input" type="date" name="date_to" value="{{ filters.date_to }}">
+            </div>
+            <button class="secondary-button" type="submit">Aplicar filtros</button>
+        </div>
     </form>
 
-    <div class="history-table">
-        <div class="history-table__head">
-            <span>USUARIO</span>
-            <span>METODO</span>
-            <span>REF (6)</span>
-            <span>MONTO</span>
-            <span>PLATAFORMA</span>
-            <span>FECHA</span>
-            <span>ACCIONES</span>
-        </div>
-        <div class="history-table__body">
-            {% for sale in sales %}
-            <article class="history-row">
-                <span>{{ sale['operator_username'] }}<br><small>{{ sale['operator_email'] }}</small></span>
-                <span>{{ sale['payment_method'] }}</span>
-                <span>{{ sale['reference'][-6:] }}</span>
-                <span>USD {{ sale['amount_paid_usd'] }}</span>
-                <span>{{ sale['primary_service'] }}</span>
-                <span>{{ sale['created_at'] }}</span>
-                <span>{{ sale['validation_digits_used'] }}d</span>
-            </article>
-            {% else %}
-            <div class="empty-state empty-state--centered">No hay registros para este filtro.</div>
-            {% endfor %}
-        </div>
+    <div class="stats-grid stats-grid--history">
+        <article class="stat-card">
+            <div class="stat-title">Ventas filtradas</div>
+            <div class="stat-value">{{ history_dashboard.kpis.sales_count }}</div>
+            <div class="stat-subtitle">Registros visibles</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-title">Total USD</div>
+            <div class="stat-value">${{ history_dashboard.kpis.total_usd }}</div>
+            <div class="stat-subtitle">Monto registrado</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-title">Ticket promedio</div>
+            <div class="stat-value">${{ history_dashboard.kpis.avg_ticket_usd }}</div>
+            <div class="stat-subtitle">Promedio por venta</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-title">Total Bs</div>
+            <div class="stat-value">Bs {{ history_dashboard.kpis.total_bs }}</div>
+            <div class="stat-subtitle">Equivalente cargado</div>
+        </article>
     </div>
+
+    <div class="content-grid content-grid--history">
+        <article class="chart-section">
+            <div class="chart-header">
+                <h3 class="chart-title">Serie diaria</h3>
+                <p class="chart-subtitle">Total cobrado en USD por día dentro del filtro activo.</p>
+            </div>
+            <div class="chart-container chart-container--history">
+                <canvas id="historyChart"></canvas>
+            </div>
+        </article>
+
+        <aside class="games-section history-insights">
+            <h3 class="section-title">Lectura rápida</h3>
+            <div class="history-insight-card">
+                <span class="history-insight-label">Método dominante</span>
+                <strong>{{ history_dashboard.top_method.name }}</strong>
+                <span>{{ history_dashboard.top_method.count }} ventas</span>
+            </div>
+            <div class="history-insight-card">
+                <span class="history-insight-label">Servicio dominante</span>
+                <strong>{{ history_dashboard.top_service.name }}</strong>
+                <span>{{ history_dashboard.top_service.count }} items</span>
+            </div>
+            <div class="history-insight-card">
+                <span class="history-insight-label">Paquete dominante</span>
+                <strong>{{ history_dashboard.top_package.name }}</strong>
+                <span>{{ history_dashboard.top_package.count }} items</span>
+            </div>
+        </aside>
+    </div>
+
+    <section class="transactions-section">
+        <div class="transactions-header">
+            <h3 class="section-title">Transacciones</h3>
+            <div class="transactions-summary">{{ sales|length }} registros en esta vista</div>
+        </div>
+        <div class="table-responsive">
+            <table class="table-dark history-table-dark">
+                <thead>
+                    <tr class="table-header-row">
+                        <th>Usuario</th>
+                        <th>Método</th>
+                        <th>Referencia</th>
+                        <th>Monto</th>
+                        <th>Servicios</th>
+                        <th>Fecha</th>
+                        <th>Validación</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sale in sales %}
+                    <tr class="table-row">
+                        <td>
+                            <div class="transaction-user">
+                                <strong>{{ sale['operator_username'] }}</strong>
+                                <span>{{ sale['operator_email'] }}</span>
+                            </div>
+                        </td>
+                        <td>{{ sale['payment_method'] }}</td>
+                        <td>#{{ sale['reference'][-6:] }}</td>
+                        <td>
+                            <div class="qty-stack">
+                                <strong class="qty-positive">USD {{ sale['amount_paid_usd'] }}</strong>
+                                <span>Bs {{ sale['amount_paid_bs'] }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="transaction-package-list">
+                                {% for item in sale['items'] %}
+                                <span class="tag">{{ item.service }} / {{ item.package }}</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td>{{ sale['created_at'] }}</td>
+                        <td>{{ sale['validation_digits_used'] }}d</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="no-data">
+                            <div class="no-data-title">No hay registros para este filtro.</div>
+                            <div class="no-data-subtitle">Prueba otro rango o limpia los filtros.</div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
 </section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script id="history-chart-labels" type="application/json">{{ history_dashboard.chart_labels|tojson }}</script>
+<script id="history-chart-values" type="application/json">{{ history_dashboard.chart_values|tojson }}</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const canvas = document.getElementById('historyChart');
+        if (!canvas || !window.Chart) {
+            return;
+        }
+
+        const labels = JSON.parse(document.getElementById('history-chart-labels').textContent || '[]');
+        const values = JSON.parse(document.getElementById('history-chart-values').textContent || '[]');
+
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: labels.map((label) => {
+                    const parts = String(label).split('-');
+                    return parts.length === 3 ? `${parts[2]}/${parts[1]}` : label;
+                }),
+                datasets: [{
+                    label: 'USD por día',
+                    data: values,
+                    borderColor: '#a043ff',
+                    backgroundColor: 'rgba(160, 67, 255, 0.18)',
+                    fill: true,
+                    tension: 0.35,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#9d968d' },
+                        grid: { color: 'rgba(255,255,255,0.06)' },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            color: '#9d968d',
+                            callback: (value) => '$' + Number(value || 0).toFixed(0),
+                        },
+                        grid: { color: 'rgba(255,255,255,0.06)' },
+                    },
+                },
+            },
+        });
+    });
+</script>
 {% endblock %}

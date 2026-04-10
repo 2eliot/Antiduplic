@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -253,6 +254,15 @@ def local_day_bounds(day_value: date, timezone_name: str) -> tuple[datetime, dat
     return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
 
+def parse_iso_date(raw_value: Optional[str]) -> Optional[date]:
+    if not raw_value:
+        return None
+    try:
+        return datetime.strptime(raw_value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 def set_payment_method_default(db: Session, selected_id: int, owner_user_id: Optional[int]) -> None:
     statement = select(PaymentMethod)
     if owner_user_id is None:
@@ -487,6 +497,53 @@ def sale_card_payload(sale: Sale) -> dict:
             {"service": item.service_name_snapshot, "package": item.package_name_snapshot}
             for item in sale.items
         ],
+    }
+
+
+def build_history_dashboard(sales: list[Sale], timezone_name: str, *, start_date: Optional[date], end_date: Optional[date]) -> dict:
+    total_usd = sum((Decimal(sale.amount_paid_usd) for sale in sales), Decimal("0.00"))
+    total_bs = sum((Decimal(sale.amount_paid_bs) for sale in sales), Decimal("0.00"))
+    avg_ticket = (total_usd / len(sales)) if sales else Decimal("0.00")
+
+    method_counter = Counter(sale.payment_method.name for sale in sales)
+    service_counter = Counter(item.service_name_snapshot for sale in sales for item in sale.items)
+    package_counter = Counter(item.package_name_snapshot for sale in sales for item in sale.items)
+
+    top_method = method_counter.most_common(1)[0] if method_counter else ("Sin datos", 0)
+    top_service = service_counter.most_common(1)[0] if service_counter else ("Sin datos", 0)
+    top_package = package_counter.most_common(1)[0] if package_counter else ("Sin datos", 0)
+
+    series_map: dict[str, Decimal] = {}
+    for sale in sales:
+        local_day = localize(sale.created_at, timezone_name).date().isoformat()
+        series_map.setdefault(local_day, Decimal("0.00"))
+        series_map[local_day] += Decimal(sale.amount_paid_usd)
+
+    if start_date and end_date and start_date <= end_date:
+        cursor = start_date
+        chart_labels = []
+        chart_values = []
+        while cursor <= end_date:
+            key = cursor.isoformat()
+            chart_labels.append(key)
+            chart_values.append(float(series_map.get(key, Decimal("0.00"))))
+            cursor += timedelta(days=1)
+    else:
+        chart_labels = sorted(series_map.keys())
+        chart_values = [float(series_map[label]) for label in chart_labels]
+
+    return {
+        "kpis": {
+            "sales_count": len(sales),
+            "total_usd": f"{total_usd:.2f}",
+            "total_bs": f"{total_bs:.2f}",
+            "avg_ticket_usd": f"{avg_ticket:.2f}",
+        },
+        "top_method": {"name": top_method[0], "count": top_method[1]},
+        "top_service": {"name": top_service[0], "count": top_service[1]},
+        "top_package": {"name": top_package[0], "count": top_package[1]},
+        "chart_labels": chart_labels,
+        "chart_values": chart_values,
     }
 
 
@@ -929,6 +986,9 @@ def history_page(
     q: Optional[str] = None,
     payment_method_id: Optional[str] = None,
     service_id: Optional[str] = None,
+    preset: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     sale_day: Optional[str] = None,
 ):
     setting = get_setting(db)
@@ -956,19 +1016,55 @@ def history_page(
         statement = statement.where(Sale.payment_method_id == payment_method_filter)
     if service_filter:
         statement = statement.join(Sale.items).where(SaleItem.service_id == service_filter)
-    if sale_day:
-        selected_day = datetime.strptime(sale_day, "%Y-%m-%d").date()
-        start_utc, end_utc = local_day_bounds(selected_day, current_user.timezone_name)
+    today_local = localize(datetime.now(timezone.utc), current_user.timezone_name).date()
+    start_date = parse_iso_date(date_from)
+    end_date = parse_iso_date(date_to)
+    selected_day = parse_iso_date(sale_day)
+
+    if selected_day and not start_date and not end_date:
+        start_date = selected_day
+        end_date = selected_day
+
+    active_preset = (preset or "").strip().lower()
+    if active_preset == "today":
+        start_date = today_local
+        end_date = today_local
+    elif active_preset == "yesterday":
+        start_date = today_local - timedelta(days=1)
+        end_date = start_date
+    elif active_preset == "last7":
+        end_date = today_local
+        start_date = today_local - timedelta(days=6)
+    elif active_preset == "this_month":
+        start_date = today_local.replace(day=1)
+        end_date = today_local
+    elif active_preset == "all":
+        start_date = None
+        end_date = None
+        sale_day = ""
+    elif start_date and not end_date:
+        end_date = start_date
+    elif end_date and not start_date:
+        start_date = end_date
+
+    if start_date and end_date and start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    if start_date and end_date:
+        start_utc, _ = local_day_bounds(start_date, current_user.timezone_name)
+        _, end_utc = local_day_bounds(end_date, current_user.timezone_name)
         statement = statement.where(Sale.created_at >= start_utc, Sale.created_at < end_utc)
 
     sales = db.scalars(statement).unique().all()
     payment_methods = get_accessible_payment_methods(db, current_user)
     services, _ = get_accessible_services_and_packages(db, current_user)
+    history_dashboard = build_history_dashboard(sales, current_user.timezone_name, start_date=start_date, end_date=end_date)
 
     return templates.TemplateResponse(
         "history.html",
         {
             "sales": [sale_card_payload(sale) for sale in sales],
+            "history_dashboard": history_dashboard,
             "timezone_name": current_user.timezone_name,
             "payment_methods": payment_methods,
             "services": services,
@@ -976,6 +1072,9 @@ def history_page(
                 "q": q or "",
                 "payment_method_id": payment_method_filter,
                 "service_id": service_filter,
+                "preset": active_preset,
+                "date_from": start_date.isoformat() if start_date else "",
+                "date_to": end_date.isoformat() if end_date else "",
                 "sale_day": sale_day or "",
             },
             **layout_context(request, current_user),
