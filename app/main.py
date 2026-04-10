@@ -1044,6 +1044,27 @@ def toggle_payment_method(
     return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@app.post("/payment-methods/{method_id}/delete")
+def delete_payment_method(
+    method_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_catalog_manager_user)],
+):
+    method = get_managed_payment_method(db, current_user, method_id)
+    linked_services = db.scalar(select(func.count()).select_from(Service).where(Service.payment_method_id == method.id)) or 0
+    linked_sales = db.scalar(select(func.count()).select_from(Sale).where(Sale.payment_method_id == method.id)) or 0
+    if linked_services:
+        request.session["payment_methods_error"] = "No puedes borrar este método porque tiene servicios asignados."
+        return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
+    if linked_sales:
+        request.session["payment_methods_error"] = "No puedes borrar este método porque ya tiene ventas registradas."
+        return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
+    db.delete(method)
+    db.commit()
+    return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @app.get("/services")
 def services_page(
     request: Request,
@@ -1148,6 +1169,29 @@ def toggle_service(
     service.is_active = not service.is_active
     if not service.is_active and service.is_default:
         service.is_default = False
+    db.commit()
+    return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/services/{service_id}/delete")
+def delete_service(
+    service_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_catalog_manager_user)],
+):
+    service = get_managed_service(db, current_user, service_id)
+    package_ids = db.scalars(select(Package.id).where(Package.service_id == service.id)).all()
+    linked_sale_items = 0
+    if package_ids:
+        linked_sale_items = db.scalar(select(func.count()).select_from(SaleItem).where(SaleItem.package_id.in_(package_ids))) or 0
+    if linked_sale_items:
+        request.session["services_error"] = "No puedes borrar este servicio porque alguno de sus paquetes ya tiene ventas registradas."
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
+    packages = db.scalars(select(Package).where(Package.service_id == service.id)).all()
+    for package in packages:
+        db.delete(package)
+    db.delete(service)
     db.commit()
     return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
 

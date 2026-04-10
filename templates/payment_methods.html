@@ -71,6 +71,9 @@
             <form method="post" action="/payment-methods/{{ method.id }}/toggle">
                 <button class="ghost-action" type="submit">{{ 'Desactivar' if method.is_active else 'Reactivar' }}</button>
             </form>
+            <form method="post" action="/payment-methods/{{ method.id }}/delete">
+                <button class="ghost-action" type="submit">Eliminar</button>
+            </form>
         </div>
     </details>
     {% endfor %}

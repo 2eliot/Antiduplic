@@ -22,6 +22,11 @@
         {% endif %}
         <form method="post" action="/services" class="entity-form-grid">
             <input name="name" type="text" placeholder="Nombre del servicio" required>
+            <select name="payment_method_id" required>
+                {% for method in payment_methods %}
+                <option value="{{ method.id }}"{% if method.is_default %} selected{% endif %}>{{ method.name }} · {{ method.currency_code }}</option>
+                {% endfor %}
+            </select>
             <input name="notes" type="text" placeholder="Notas o categoria">
             <input name="display_order" type="number" min="0" value="0" required>
             <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"> Predeterminado</label>
@@ -41,6 +46,7 @@
             <div class="collapsible-summary__meta">
                 <div class="tag-row">
                     {% if service.is_default %}<span class="tag">Predeterminado</span>{% endif %}
+                    <span class="tag">{{ service.payment_method.name if service.payment_method else 'Sin método' }}</span>
                     <span class="tag">{{ service.packages | selectattr('is_active') | list | length }} paquetes activos</span>
                     <span class="tag">{{ 'Activo' if service.is_active else 'Inactivo' }}</span>
                 </div>
@@ -51,6 +57,11 @@
             <form method="post" action="/services/{{ service.id }}/update" class="form-stack">
                 <div class="entity-form-grid">
                     <input name="name" type="text" value="{{ service.name }}" required>
+                    <select name="payment_method_id" required>
+                        {% for method in payment_methods %}
+                        <option value="{{ method.id }}"{% if service.payment_method_id == method.id %} selected{% endif %}>{{ method.name }} · {{ method.currency_code }}</option>
+                        {% endfor %}
+                    </select>
                     <input name="notes" type="text" value="{{ service.notes or '' }}" placeholder="Notas">
                     <input name="display_order" type="number" min="0" value="{{ service.display_order }}" required>
                     <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"{% if service.is_default %} checked{% endif %}> Predeterminado</label>
@@ -61,6 +72,9 @@
             </form>
             <form method="post" action="/services/{{ service.id }}/toggle">
                 <button class="ghost-action" type="submit">{{ 'Desactivar' if service.is_active else 'Reactivar' }}</button>
+            </form>
+            <form method="post" action="/services/{{ service.id }}/delete">
+                <button class="ghost-action" type="submit">Eliminar servicio</button>
             </form>
 
             <details class="collapsible-subpanel">
