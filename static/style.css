@@ -468,17 +468,14 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     display: inline-flex;
     align-items: center;
     width: fit-content;
-    min-height: 34px;
-    padding: 0 12px;
-    border-radius: 12px;
-    border: 1px solid rgba(155, 90, 255, 0.28);
-    background: linear-gradient(180deg, rgba(123,44,255,0.26), rgba(91,24,176,0.16));
-    color: #fff;
-    font-size: 0.68rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #d8c99f;
+    font-size: 0.66rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .catalog-summary__copy h3,
 .catalog-card__copy h3,
@@ -496,11 +493,19 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     gap: 12px;
     margin-left: auto;
 }
-.catalog-summary__aside .soft-chip {
-    min-height: 36px;
-    padding: 0 12px;
-    border-radius: 12px;
-    background: rgba(255,255,255,0.04);
+.catalog-toggle {
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(155, 90, 255, 0.3);
+    background: linear-gradient(180deg, rgba(123,44,255,0.24), rgba(91,24,176,0.16));
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
 }
 .collapsible-summary--panel,
 .collapsible-summary--card {
@@ -526,24 +531,22 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     margin-left: auto;
 }
 .collapsible-chevron {
-    width: 40px;
-    height: 40px;
+    width: 18px;
+    height: 18px;
     display: inline-grid;
     place-items: center;
-    border-radius: 14px;
-    border: 1px solid rgba(155, 90, 255, 0.3);
-    background: linear-gradient(180deg, rgba(123,44,255,0.24), rgba(91,24,176,0.16));
+    border-radius: 0;
+    border: 0;
+    background: transparent;
     color: #f2ece5;
     font-size: 0.9rem;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
-    transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+    box-shadow: none;
+    transition: transform 180ms ease;
 }
 .collapsible-panel[open] > .collapsible-summary .collapsible-chevron,
 .collapsible-subpanel[open] > .collapsible-summary .collapsible-chevron,
 .collapsible-subcard[open] > .collapsible-summary .collapsible-chevron {
-    transform: rotate(180deg) scale(1.02);
-    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), rgba(123,44,255,0.32));
-    border-color: rgba(155, 90, 255, 0.45);
+    transform: rotate(180deg);
 }
 .collapsible-content {
     display: flex;
@@ -561,18 +564,16 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 .collapsible-panel:hover > .collapsible-summary .collapsible-chevron,
 .collapsible-subpanel:hover > .collapsible-summary .collapsible-chevron,
 .collapsible-subcard:hover > .collapsible-summary .collapsible-chevron {
-    border-color: rgba(155, 90, 255, 0.38);
-    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.16), rgba(123,44,255,0.24));
+    background: transparent;
 }
 .collapsible-panel:hover > .collapsible-summary,
 .collapsible-subpanel:hover > .collapsible-summary,
 .collapsible-subcard:hover > .collapsible-summary {
     background: linear-gradient(180deg, rgba(123,44,255,0.08), rgba(255,255,255,0));
 }
-.collapsible-panel:hover > .collapsible-summary .catalog-summary__eyebrow,
-.collapsible-panel:hover > .collapsible-summary .catalog-card__label,
-.collapsible-subpanel:hover > .collapsible-summary .catalog-card__label,
-.collapsible-subcard:hover > .collapsible-summary .catalog-card__label {
+.collapsible-panel:hover > .collapsible-summary .catalog-toggle,
+.collapsible-subpanel:hover > .collapsible-summary .catalog-toggle,
+.collapsible-subcard:hover > .collapsible-summary .catalog-toggle {
     border-color: rgba(155, 90, 255, 0.42);
     background: linear-gradient(180deg, rgba(123,44,255,0.34), rgba(91,24,176,0.24));
 }
