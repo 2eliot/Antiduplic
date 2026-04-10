@@ -1323,19 +1323,28 @@ def update_profile(
     full_name: str = Form(...),
     email: str = Form(...),
     timezone_name: str = Form(...),
-    current_password: str = Form(...),
+    current_password: str = Form(""),
     avatar_file: Optional[UploadFile] = File(None),
 ):
-    if not verify_password(current_password, current_user.password_hash):
+    normalized_full_name = full_name.strip()
+    normalized_email = email.strip().lower()
+    normalized_timezone = timezone_name if timezone_name in SUPPORTED_TIMEZONES else current_user.timezone_name
+    profile_changed = (
+        normalized_full_name != current_user.full_name
+        or normalized_email != current_user.email
+        or normalized_timezone != current_user.timezone_name
+    )
+
+    if profile_changed and not verify_password(current_password, current_user.password_hash):
         return templates.TemplateResponse(
             "profile.html",
             build_profile_context(request, db, current_user, profile_error="Debes confirmar tu contraseña actual para cambiar datos sensibles."),
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    current_user.full_name = full_name
-    current_user.email = email
-    current_user.timezone_name = timezone_name
+    current_user.full_name = normalized_full_name
+    current_user.email = normalized_email
+    current_user.timezone_name = normalized_timezone
     if avatar_file and avatar_file.filename:
         try:
             current_user.avatar_url = save_avatar_upload(avatar_file, current_user.id, current_user.avatar_url)

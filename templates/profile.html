@@ -24,7 +24,7 @@
                 <input id="avatar_file" name="avatar_file" type="file" form="profile_form" accept="image/*">
                 <small class="helper-text">Sube una imagen directa desde tu galería. Formatos: JPG, PNG, GIF o WEBP.</small>
                 <button type="submit" form="profile_form" class="secondary-button full-width">ACTUALIZAR IMAGEN</button>
-                <small class="helper-text">Para guardar la imagen también debes colocar tu contraseña actual en el formulario.</small>
+                <small class="helper-text">La imagen se actualiza de inmediato. La contraseña solo se pide si cambias tus datos del perfil.</small>
             </div>
 
             <form method="post" action="/profile" class="form-stack" id="profile_form" enctype="multipart/form-data">
@@ -42,7 +42,7 @@
                 </div>
                 <div>
                     <label for="profile_current_password">CONTRASENA ACTUAL</label>
-                    <input id="profile_current_password" name="current_password" type="password" required>
+                    <input id="profile_current_password" name="current_password" type="password">
                 </div>
                 {% if profile_error %}
                 <div class="alert alert--error">{{ profile_error }}</div>
@@ -60,7 +60,7 @@
             <label for="email">DIRECCION DE EMAIL</label>
             <input id="email" name="email" type="email" form="profile_form" value="{{ current_user.email }}" required>
             <button type="submit" form="profile_form" class="secondary-button full-width">ACTUALIZAR EMAIL</button>
-            <small class="helper-text">* El cambio de email requiere tu contrasena actual.</small>
+            <small class="helper-text">* Si cambias email, nombre o zona horaria, debes colocar tu contrasena actual.</small>
         </section>
 
         <form method="post" action="/profile/password" class="workspace-panel form-stack">
