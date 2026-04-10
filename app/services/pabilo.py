@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
@@ -124,6 +125,32 @@ def _is_rate_limited_response(status_code: int, data: dict[str, Any]) -> bool:
     )
 
 
+def _extract_payment_datetime(payment_data: dict[str, Any], payload_data: dict[str, Any], full_data: dict[str, Any]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    raw_datetime = (
+        payment_data.get("created_at")
+        or payment_data.get("payment_date")
+        or payment_data.get("fecha_pago")
+        or payload_data.get("created_at")
+        or full_data.get("created_at")
+    )
+    if not raw_datetime:
+        return None, None, None
+
+    raw_text = str(raw_datetime).strip()
+    if not raw_text:
+        return None, None, None
+
+    normalized_text = raw_text.replace("Z", "+00:00")
+    try:
+        parsed_datetime = datetime.fromisoformat(normalized_text)
+    except ValueError:
+        if len(raw_text) == 10 and raw_text.count("-") == 2:
+            return raw_text, None, raw_text
+        return None, None, raw_text
+
+    return parsed_datetime.strftime("%Y-%m-%d"), parsed_datetime.strftime("%I:%M:%S %p"), raw_text
+
+
 def _normalize_payment_data(reference: str, payload_data: dict[str, Any], full_data: dict[str, Any]) -> dict[str, Any]:
     payment_data = payload_data.get("user_bank_payment") or payload_data.get("payment") or payload_data
     status_value = str(payment_data.get("status") or payload_data.get("status") or full_data.get("status") or "").strip().lower()
@@ -139,6 +166,7 @@ def _normalize_payment_data(reference: str, payload_data: dict[str, Any], full_d
     amount_decimal = _coerce_decimal_amount(raw_amount)
     verified_flag = bool(payload_data.get("verified") or full_data.get("verified"))
     is_verified = status_value in PABILO_ACCEPTED_STATUSES or verified_flag
+    payment_date, payment_time, payment_datetime_raw = _extract_payment_datetime(payment_data, payload_data, full_data)
     normalized_reference = str(
         payment_data.get("bank_reference")
         or payment_data.get("bank_reference_id")
@@ -155,6 +183,9 @@ def _normalize_payment_data(reference: str, payload_data: dict[str, Any], full_d
         "amount_paid_currency": "BS" if amount_decimal is not None else None,
         "verified": is_verified,
         "is_new": bool(payload_data.get("is_new")),
+        "payment_date": payment_date,
+        "payment_time": payment_time,
+        "payment_datetime_raw": payment_datetime_raw,
         "raw": payment_data,
     }
 

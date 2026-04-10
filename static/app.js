@@ -14,6 +14,22 @@ function escapeHtml(value) {
         .replaceAll("'", "&#39;");
 }
 
+function omitPabiloNoise(value) {
+    const hiddenKeys = new Set(["banco_origen", "cuenta_pagador", "cuentaPagador"]);
+    if (Array.isArray(value)) {
+        return value.map((item) => omitPabiloNoise(item));
+    }
+    if (!value || typeof value !== "object") {
+        return value;
+    }
+
+    return Object.fromEntries(
+        Object.entries(value)
+            .filter(([key]) => !hiddenKeys.has(key))
+            .map(([key, entryValue]) => [key, omitPabiloNoise(entryValue)]),
+    );
+}
+
 function setupAuthPanels() {
     const root = document.querySelector("[data-auth-root]");
     if (!root) {
@@ -304,6 +320,12 @@ function setupDashboard() {
         if (payment.status) {
             summaryLines.push(`<div class="pabilo-line"><strong>Estado</strong><span>${escapeHtml(payment.status)}</span></div>`);
         }
+        if (payment.payment_date) {
+            summaryLines.push(`<div class="pabilo-line"><strong>Fecha</strong><span>${escapeHtml(payment.payment_date)}</span></div>`);
+        }
+        if (payment.payment_time) {
+            summaryLines.push(`<div class="pabilo-line"><strong>Hora</strong><span>${escapeHtml(payment.payment_time)}</span></div>`);
+        }
         if (payment.verification_id) {
             summaryLines.push(`<div class="pabilo-line"><strong>ID</strong><span>${escapeHtml(payment.verification_id)}</span></div>`);
         }
@@ -311,7 +333,7 @@ function setupDashboard() {
             summaryLines.push("<div class='pabilo-line'><strong>Resultado</strong><span>Sin datos normalizados para mostrar.</span></div>");
         }
         pabiloResultSummary.innerHTML = summaryLines.join("");
-        pabiloResultRaw.textContent = JSON.stringify(result.response || result, null, 2);
+        pabiloResultRaw.textContent = JSON.stringify(omitPabiloNoise(result.response || result), null, 2);
     }
 
     function resetReferenceField() {
