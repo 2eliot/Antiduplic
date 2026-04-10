@@ -458,6 +458,8 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     gap: 14px;
     cursor: pointer;
     position: relative;
+    appearance: none;
+    -webkit-appearance: none;
 }
 .catalog-summary__copy,
 .catalog-card__copy {
@@ -483,18 +485,20 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     margin-left: auto;
 }
 .catalog-toggle {
-    min-height: 40px;
-    padding: 0 14px;
-    border-radius: 14px;
-    border: 1px solid rgba(155, 90, 255, 0.3);
-    background: linear-gradient(180deg, rgba(123,44,255,0.24), rgba(91,24,176,0.16));
+    min-height: 48px;
+    padding: 0 18px;
+    border-radius: 16px;
+    border: 1px solid rgba(155, 90, 255, 0.34);
+    background: linear-gradient(90deg, #7b2cff, #a043ff);
     color: #fff;
-    font-size: 0.78rem;
-    font-weight: 700;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    justify-content: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 24px rgba(123,44,255,0.18);
     cursor: pointer;
 }
 .collapsible-summary--panel,
@@ -520,24 +524,6 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     gap: 12px;
     margin-left: auto;
 }
-.collapsible-chevron {
-    width: 18px;
-    height: 18px;
-    display: inline-grid;
-    place-items: center;
-    border-radius: 0;
-    border: 0;
-    background: transparent;
-    color: #f2ece5;
-    font-size: 0.9rem;
-    box-shadow: none;
-    transition: transform 180ms ease;
-}
-.collapsible-panel[open] > .collapsible-summary .collapsible-chevron,
-.collapsible-subpanel[open] > .collapsible-summary .collapsible-chevron,
-.collapsible-subcard[open] > .collapsible-summary .collapsible-chevron {
-    transform: rotate(180deg);
-}
 .collapsible-content {
     display: flex;
     flex-direction: column;
@@ -551,11 +537,6 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 18px;
 }
-.collapsible-panel:hover > .collapsible-summary .collapsible-chevron,
-.collapsible-subpanel:hover > .collapsible-summary .collapsible-chevron,
-.collapsible-subcard:hover > .collapsible-summary .collapsible-chevron {
-    background: transparent;
-}
 .collapsible-panel:hover > .collapsible-summary,
 .collapsible-subpanel:hover > .collapsible-summary,
 .collapsible-subcard:hover > .collapsible-summary {
@@ -564,8 +545,8 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 .collapsible-panel:hover > .collapsible-summary .catalog-toggle,
 .collapsible-subpanel:hover > .collapsible-summary .catalog-toggle,
 .collapsible-subcard:hover > .collapsible-summary .catalog-toggle {
-    border-color: rgba(155, 90, 255, 0.42);
-    background: linear-gradient(180deg, rgba(123,44,255,0.34), rgba(91,24,176,0.24));
+    border-color: rgba(155, 90, 255, 0.48);
+    background: linear-gradient(90deg, #8a39ff, #b156ff);
 }
 .collapsible-summary:hover {
     cursor: pointer;

@@ -13,7 +13,7 @@
             <p class="helper-text">Organiza nuevos servicios sin abrir bloques innecesarios.</p>
         </div>
         <div class="catalog-summary__aside">
-            <span class="catalog-toggle">Abrir formulario <span class="collapsible-chevron" aria-hidden="true">▾</span></span>
+            <span class="catalog-toggle">Crear servicio</span>
         </div>
     </summary>
     <div class="collapsible-content">
@@ -44,7 +44,7 @@
                     <span class="tag">{{ service.packages | selectattr('is_active') | list | length }} paquetes activos</span>
                     <span class="tag">{{ 'Activo' if service.is_active else 'Inactivo' }}</span>
                 </div>
-                <span class="catalog-toggle">Editar <span class="collapsible-chevron" aria-hidden="true">▾</span></span>
+                <span class="catalog-toggle">Editar</span>
             </div>
         </summary>
         <div class="collapsible-content service-packages">
@@ -69,7 +69,7 @@
                         <strong>PAQUETES</strong>
                     </div>
                     <div class="collapsible-summary__meta">
-                        <span class="catalog-toggle">{{ service.packages | length }} items <span class="collapsible-chevron" aria-hidden="true">▾</span></span>
+                        <span class="catalog-toggle">{{ service.packages | length }} items</span>
                     </div>
                 </summary>
                 <div class="collapsible-content service-packages">
@@ -85,7 +85,7 @@
                                     <span class="tag">Orden {{ package.display_order }}</span>
                                     <span class="tag">{{ 'Activo' if package.is_active else 'Inactivo' }}</span>
                                 </div>
-                                <span class="catalog-toggle">Editar <span class="collapsible-chevron" aria-hidden="true">▾</span></span>
+                                <span class="catalog-toggle">Editar</span>
                             </div>
                         </summary>
                         <div class="collapsible-content">
@@ -112,7 +112,7 @@
                                 <strong>AGREGAR PAQUETE</strong>
                                 <p class="helper-text">Crea un nuevo paquete sin expandir todo el servicio.</p>
                             </div>
-                            <span class="catalog-toggle">Crear <span class="collapsible-chevron" aria-hidden="true">▾</span></span>
+                            <span class="catalog-toggle">Crear</span>
                         </summary>
                         <div class="collapsible-content">
                             <form method="post" action="/services/{{ service.id }}/packages" class="package-editor package-editor--new">
