@@ -43,7 +43,7 @@
             <div class="step-title"><span class="step-number">2</span><h3>Coloca numero de pago</h3></div>
             <div class="reference-shell">
                 <input id="reference_input" class="reference-input" type="text" placeholder="Ingresa la referencia...">
-                <span class="reference-symbol">#</span>
+                <button type="button" class="icon-button icon-button--clear is-hidden" id="clear_reference_button" aria-label="Limpiar referencia">×</button>
             </div>
             <small class="helper-text">Ultimos 6: <span data-last-six>------</span></small>
         </div>
@@ -67,7 +67,7 @@
 
         <div class="step-block">
             <div class="step-title"><span class="step-number">4</span><h3>Paquetes</h3></div>
-            <div id="package_list" class="stack-list"></div>
+            <div id="package_list" class="package-grid"></div>
         </div>
 
         <div class="step-block">
@@ -101,17 +101,51 @@
 
         <article class="workspace-panel">
             <div class="panel-heading-heavy">
+                <h3>Ventas ultimos 7 dias</h3>
+                <span class="soft-chip">{{ recent_sales_summary.range_label }}</span>
+            </div>
+            <div class="stats-grid stats-grid--compact">
+                <article class="stat-card">
+                    <div class="stat-title">Ventas</div>
+                    <div class="stat-value">{{ recent_sales_summary.sales_count }}</div>
+                    <div class="stat-subtitle">Operaciones guardadas</div>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-title">Total USD</div>
+                    <div class="stat-value">${{ recent_sales_summary.total_usd }}</div>
+                    <div class="stat-subtitle">Cobrado en 7 dias</div>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-title">Ticket promedio</div>
+                    <div class="stat-value">${{ recent_sales_summary.avg_ticket_usd }}</div>
+                    <div class="stat-subtitle">Promedio por venta</div>
+                </article>
+            </div>
+            <div class="seven-day-strip">
+                {% for day in recent_sales_summary.days %}
+                <article class="seven-day-pill">
+                    <strong>{{ day.label }}</strong>
+                    <span>{{ day.sales_count }} ventas</span>
+                    <span>USD {{ day.total_usd }}</span>
+                </article>
+                {% endfor %}
+            </div>
+            <div class="helper-text helper-text--panel">Mejor dia: {{ recent_sales_summary.best_day.label }} · USD {{ recent_sales_summary.best_day.total_usd }} · {{ recent_sales_summary.best_day.sales_count }} ventas</div>
+        </article>
+
+        <article class="workspace-panel">
+            <div class="panel-heading-heavy">
                 <h3>Registros recientes</h3>
                 <span class="soft-chip">{{ timezone_name }}</span>
             </div>
-            <div class="history-stack">
+            <div class="history-stack" id="recent_sales_list">
                 {% for sale in recent_sales %}
                 <article class="history-card">
                     <div class="history-card__top">
                         <strong>#{{ sale['id'] }}</strong>
                         <span>{{ sale['created_at'] }}</span>
                     </div>
-                    <p>{{ sale['payment_method'] }} · Ref {{ sale['reference'] }}</p>
+                    <p>{{ sale['payment_method'] }} · Ref {{ sale['reference_short'] }}</p>
                     <ul class="inline-list">
                         {% for item in sale['items'] %}
                         <li>{{ item['service'] }} / {{ item['package'] }}</li>
@@ -120,7 +154,7 @@
                     <div class="history-card__totals">USD {{ sale['amount_paid_usd'] }} · Bs {{ sale['amount_paid_bs'] }}</div>
                 </article>
                 {% else %}
-                <p class="empty-state">Todavia no hay ventas registradas.</p>
+                <p class="empty-state" id="recent_sales_empty">Todavia no hay ventas registradas.</p>
                 {% endfor %}
             </div>
         </article>

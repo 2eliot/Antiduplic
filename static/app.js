@@ -2,7 +2,17 @@ document.addEventListener("DOMContentLoaded", () => {
     setupSidebar();
     setupAuthPanels();
     setupDashboard();
+    setupHistoryDetails();
 });
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+}
 
 function setupAuthPanels() {
     const root = document.querySelector("[data-auth-root]");
@@ -74,7 +84,8 @@ function setupDashboard() {
     const forceSevenButton = document.getElementById("force_seven_button");
     const duplicateModal = document.getElementById("duplicate_modal");
     const closeDuplicateModal = document.getElementById("close_duplicate_modal");
-    const exchangeRate = Number(root.dataset.exchangeRate || 0);
+    const clearReferenceButton = document.getElementById("clear_reference_button");
+    const recentSalesList = document.getElementById("recent_sales_list");
     const catalog = JSON.parse(catalogElement.textContent || "[]");
 
     const state = {
@@ -84,7 +95,11 @@ function setupDashboard() {
         duplicateStatus: null,
     };
 
-    bindChoiceGroup("payment-methods", paymentInput);
+    bindChoiceGroup("payment-methods", paymentInput, () => {
+        if (referenceInput.value.trim()) {
+            checkReference();
+        }
+    });
     bindChoiceGroup("services", serviceInput, (value) => {
         state.selectedServiceId = Number(value);
         renderPackages();
@@ -102,13 +117,13 @@ function setupDashboard() {
             const button = document.createElement("button");
             button.type = "button";
             button.className = "package-button";
-            button.innerHTML = `<span>${activeService.name} · ${pkg.name}</span><strong>${pkg.display_price}</strong>`;
-            button.addEventListener("click", () => addPackage(pkg, activeService));
+            button.innerHTML = `<span class="package-button__name">${escapeHtml(pkg.name)}</span><strong>${escapeHtml(pkg.display_price)}</strong>`;
+            button.addEventListener("click", () => addPackage(pkg, activeService, button));
             packageList.appendChild(button);
         });
     }
 
-    function addPackage(pkg, service) {
+    function addPackage(pkg, service, button) {
         state.cart.push({
             packageId: pkg.id,
             serviceName: service.name,
@@ -117,6 +132,11 @@ function setupDashboard() {
             bsPrice: Number(pkg.bs_price),
             displayPrice: pkg.display_price,
         });
+        if (button) {
+            button.classList.remove("is-just-added");
+            window.requestAnimationFrame(() => button.classList.add("is-just-added"));
+            window.setTimeout(() => button.classList.remove("is-just-added"), 260);
+        }
         renderCart();
     }
 
@@ -162,6 +182,9 @@ function setupDashboard() {
         const digits = (referenceInput.value.match(/\d/g) || []).join("");
         const suffix = digits.slice(-Math.min(digits.length, 6));
         lastSix.textContent = suffix || "------";
+        if (clearReferenceButton) {
+            clearReferenceButton.classList.toggle("is-hidden", !referenceInput.value.trim());
+        }
         if (!digits) {
             if (duplicateWarning) {
                 duplicateWarning.classList.add("is-hidden");
@@ -176,12 +199,67 @@ function setupDashboard() {
         }
     }
 
+    function resetReferenceField() {
+        referenceInput.value = "";
+        state.forceSevenValidation = false;
+        state.duplicateStatus = null;
+        normalizeReference();
+        if (duplicateWarning) {
+            duplicateWarning.classList.add("is-hidden");
+        }
+        if (duplicateModal) {
+            duplicateModal.classList.add("is-hidden");
+        }
+        if (forceSevenButton) {
+            forceSevenButton.classList.add("is-hidden");
+            forceSevenButton.textContent = "Validar con 7 digitos";
+            forceSevenButton.classList.remove("is-selected");
+        }
+    }
+
+    function renderRecentSaleCard(sale) {
+        return `
+            <article class="history-card history-card--new">
+                <div class="history-card__top">
+                    <strong>#${escapeHtml(sale.id)}</strong>
+                    <span>${escapeHtml(sale.created_at)}</span>
+                </div>
+                <p>${escapeHtml(sale.payment_method)} · Ref ${escapeHtml(sale.reference_short || sale.reference)}</p>
+                <ul class="inline-list">
+                    ${sale.items.map((item) => `<li>${escapeHtml(item.service)} / ${escapeHtml(item.package)}</li>`).join("")}
+                </ul>
+                <div class="history-card__totals">USD ${escapeHtml(sale.amount_paid_usd)} · Bs ${escapeHtml(sale.amount_paid_bs)}</div>
+            </article>
+        `;
+    }
+
+    function prependRecentSale(sale) {
+        if (!recentSalesList) {
+            return;
+        }
+        const emptyState = document.getElementById("recent_sales_empty");
+        if (emptyState) {
+            emptyState.remove();
+        }
+        recentSalesList.insertAdjacentHTML("afterbegin", renderRecentSaleCard(sale));
+        const cards = recentSalesList.querySelectorAll(".history-card");
+        cards.forEach((card, index) => {
+            if (index >= 5) {
+                card.remove();
+            }
+        });
+    }
+
     let debounceTimer = null;
     referenceInput.addEventListener("input", () => {
         normalizeReference();
         window.clearTimeout(debounceTimer);
         debounceTimer = window.setTimeout(checkReference, 350);
     });
+
+    if (clearReferenceButton) {
+        clearReferenceButton.addEventListener("click", resetReferenceField);
+    }
 
     if (forceSevenButton) {
         forceSevenButton.addEventListener("click", () => {
@@ -281,19 +359,10 @@ function setupDashboard() {
 
         state.cart = [];
         state.forceSevenValidation = false;
-        referenceInput.value = "";
         notesInput.value = "";
-        lastSix.textContent = "------";
-        if (duplicateWarning) {
-            duplicateWarning.classList.add("is-hidden");
-        }
-        if (duplicateModal) {
-            duplicateModal.classList.add("is-hidden");
-        }
-        if (forceSevenButton) {
-            forceSevenButton.classList.add("is-hidden");
-        }
+        resetReferenceField();
         renderCart();
+        prependRecentSale(body.sale);
         showFeedback(`Venta #${body.sale.id} registrada correctamente.`, "success");
         registerButton.disabled = false;
     });
@@ -306,6 +375,7 @@ function setupDashboard() {
 
     renderPackages();
     renderCart();
+    normalizeReference();
 }
 
 function bindChoiceGroup(groupName, input, callback) {
@@ -315,6 +385,8 @@ function bindChoiceGroup(groupName, input, callback) {
     }
 
     const buttons = group.querySelectorAll("[data-role='choice-button']");
+    const initiallySelected = Array.from(buttons).find((button) => button.classList.contains("is-selected")) || buttons[0];
+
     buttons.forEach((button) => {
         button.addEventListener("click", () => {
             buttons.forEach((item) => item.classList.remove("is-selected"));
@@ -323,6 +395,34 @@ function bindChoiceGroup(groupName, input, callback) {
             if (callback) {
                 callback(button.dataset.value);
             }
+        });
+    });
+
+    if (initiallySelected) {
+        buttons.forEach((item) => item.classList.toggle("is-selected", item === initiallySelected));
+        input.value = initiallySelected.dataset.value;
+        if (callback) {
+            callback(initiallySelected.dataset.value);
+        }
+    }
+}
+
+function setupHistoryDetails() {
+    const buttons = document.querySelectorAll("[data-history-detail-toggle]");
+    if (!buttons.length) {
+        return;
+    }
+
+    buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+            const saleDetailId = button.dataset.saleDetailId;
+            const detailRow = document.querySelector(`[data-sale-detail-row="${saleDetailId}"]`);
+            if (!detailRow) {
+                return;
+            }
+            const isHidden = detailRow.classList.toggle("is-hidden");
+            button.setAttribute("aria-expanded", String(!isHidden));
+            button.textContent = isHidden ? "Detalle" : "Ocultar";
         });
     });
 }

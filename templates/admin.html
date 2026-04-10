@@ -8,6 +8,39 @@
 
 <section class="workspace-panel form-stack">
     <div class="panel-heading-heavy">
+        <h3>Ventas ultimos 7 dias</h3>
+        <span class="soft-chip">{{ recent_sales_summary.range_label }}</span>
+    </div>
+    <div class="stats-grid stats-grid--compact">
+        <article class="stat-card">
+            <div class="stat-title">Ventas</div>
+            <div class="stat-value">{{ recent_sales_summary.sales_count }}</div>
+            <div class="stat-subtitle">Sin contar administradores</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-title">Total USD</div>
+            <div class="stat-value">${{ recent_sales_summary.total_usd }}</div>
+            <div class="stat-subtitle">Últimos 7 días</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-title">Ticket promedio</div>
+            <div class="stat-value">${{ recent_sales_summary.avg_ticket_usd }}</div>
+            <div class="stat-subtitle">Promedio por operación</div>
+        </article>
+    </div>
+    <div class="seven-day-strip">
+        {% for day in recent_sales_summary.days %}
+        <article class="seven-day-pill">
+            <strong>{{ day.label }}</strong>
+            <span>{{ day.sales_count }} ventas</span>
+            <span>USD {{ day.total_usd }}</span>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="workspace-panel form-stack">
+    <div class="panel-heading-heavy">
         <h3>USUARIOS</h3>
     </div>
     <div class="cards-grid cards-grid--mosaic cards-grid--stretch">

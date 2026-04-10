@@ -125,6 +125,7 @@
                         <th>Servicios</th>
                         <th>Fecha</th>
                         <th>Validación</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -153,10 +154,55 @@
                         </td>
                         <td>{{ sale['created_at'] }}</td>
                         <td>{{ sale['validation_digits_used'] }}d</td>
+                        <td>
+                            <button
+                                type="button"
+                                class="secondary-button secondary-button--compact history-detail-toggle"
+                                data-history-detail-toggle
+                                data-sale-detail-id="sale-{{ sale['id'] }}"
+                                aria-expanded="false"
+                            >Detalle</button>
+                        </td>
+                    </tr>
+                    <tr class="history-detail-row is-hidden" data-sale-detail-row="sale-{{ sale['id'] }}">
+                        <td colspan="8">
+                            <div class="history-detail-card">
+                                <div class="history-detail-grid">
+                                    <div>
+                                        <span class="history-detail-label">ID</span>
+                                        <strong>#{{ sale['id'] }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="history-detail-label">Referencia</span>
+                                        <strong>{{ sale['reference_raw'] }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="history-detail-label">Total USD</span>
+                                        <strong>USD {{ sale['amount_paid_usd'] }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="history-detail-label">Total Bs</span>
+                                        <strong>Bs {{ sale['amount_paid_bs'] }}</strong>
+                                    </div>
+                                </div>
+                                <div class="history-detail-items">
+                                    {% for item in sale['items'] %}
+                                    <article class="history-detail-item">
+                                        <strong>{{ item['service'] }}</strong>
+                                        <span>{{ item['package'] }}</span>
+                                        <span>USD {{ item['usd_price'] }}</span>
+                                    </article>
+                                    {% endfor %}
+                                </div>
+                                {% if sale['notes'] %}
+                                <div class="history-detail-note">Nota: {{ sale['notes'] }}</div>
+                                {% endif %}
+                            </div>
+                        </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" class="no-data">
+                        <td colspan="8" class="no-data">
                             <div class="no-data-title">No hay registros para este filtro.</div>
                             <div class="no-data-subtitle">Prueba otro rango o limpia los filtros.</div>
                         </td>

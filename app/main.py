@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import shutil
 from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Annotated, Optional
+from uuid import uuid4
 from zoneinfo import ZoneInfo, available_timezones
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -29,6 +31,8 @@ from app.services.duplicates import build_suffix, check_duplicate_reference, cur
 
 templates = Jinja2Templates(directory="templates")
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+AVATAR_UPLOAD_DIR = STATIC_DIR / "uploads" / "avatars"
+ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 SUPPORTED_TIMEZONES = [
     "America/Caracas",
     "America/Bogota",
@@ -193,6 +197,7 @@ def ensure_database_features() -> None:
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_database_features()
+    AVATAR_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with SessionLocal() as session:
         if settings.seed_demo_data:
             seed_database(session)
@@ -254,6 +259,14 @@ def local_day_bounds(day_value: date, timezone_name: str) -> tuple[datetime, dat
     return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
 
+def last_n_local_day_bounds(timezone_name: str, days: int) -> tuple[date, date, datetime, datetime]:
+    today_local = localize(datetime.now(timezone.utc), timezone_name).date()
+    start_date = today_local - timedelta(days=max(days - 1, 0))
+    start_utc, _ = local_day_bounds(start_date, timezone_name)
+    _, end_utc = local_day_bounds(today_local, timezone_name)
+    return start_date, today_local, start_utc, end_utc
+
+
 def parse_iso_date(raw_value: Optional[str]) -> Optional[date]:
     if not raw_value:
         return None
@@ -302,6 +315,58 @@ def catalog_name_exists(db: Session, model, user: User, name: str, *, exclude_id
 
 def consume_flash_message(request: Request, key: str) -> Optional[str]:
     return request.session.pop(key, None)
+
+
+def build_profile_context(request: Request, db: Session, current_user: User, *, profile_error: Optional[str] = None) -> dict:
+    setting = get_setting(db)
+    timezone_options = [timezone_name for timezone_name in SUPPORTED_TIMEZONES if timezone_name in available_timezones()]
+    if current_user.timezone_name not in timezone_options:
+        timezone_options.insert(0, current_user.timezone_name)
+
+    return {
+        "timezone_options": timezone_options,
+        "days_left": calculate_days_left(current_user.subscription_ends_at, current_user.timezone_name),
+        "support_contact": setting.support_contact,
+        "latest_request": db.scalar(
+            select(DaysExtensionRequest)
+            .where(DaysExtensionRequest.user_id == current_user.id)
+            .order_by(DaysExtensionRequest.created_at.desc())
+        ),
+        "profile_error": profile_error,
+        **layout_context(request, current_user),
+    }
+
+
+def resolve_local_static_path(public_url: Optional[str]) -> Optional[Path]:
+    if not public_url or not public_url.startswith("/static/"):
+        return None
+    relative_path = public_url.removeprefix("/static/")
+    local_path = STATIC_DIR / Path(relative_path)
+    try:
+        local_path.resolve().relative_to(STATIC_DIR.resolve())
+    except ValueError:
+        return None
+    return local_path
+
+
+def save_avatar_upload(avatar_file: UploadFile, user_id: int, existing_avatar_url: Optional[str]) -> str:
+    filename = (avatar_file.filename or "").strip()
+    suffix = Path(filename).suffix.lower()
+    if not filename or suffix not in ALLOWED_IMAGE_SUFFIXES or not (avatar_file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La imagen debe ser JPG, PNG, GIF o WEBP.")
+
+    AVATAR_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    relative_path = Path("uploads") / "avatars" / f"user-{user_id}-{uuid4().hex}{suffix}"
+    target_path = STATIC_DIR / relative_path
+    avatar_file.file.seek(0)
+    with target_path.open("wb") as output_file:
+        shutil.copyfileobj(avatar_file.file, output_file)
+
+    previous_file = resolve_local_static_path(existing_avatar_url)
+    if previous_file and previous_file.exists() and previous_file != target_path:
+        previous_file.unlink(missing_ok=True)
+
+    return f"/static/{relative_path.as_posix()}"
 
 
 def user_can_manage_catalog(user: User) -> bool:
@@ -486,16 +551,77 @@ def sale_card_payload(sale: Sale) -> dict:
         "payment_method": sale.payment_method.name,
         "operator_username": sale.operator.username,
         "operator_email": sale.operator.email,
+        "reference_raw": sale.reference_raw,
         "reference": sale.reference_digits,
+        "reference_short": sale.reference_last_6,
         "validation_digits_used": sale.validation_digits_used,
         "amount_paid_usd": f"{Decimal(sale.amount_paid_usd):.2f}",
         "amount_paid_bs": f"{Decimal(sale.amount_paid_bs):.2f}",
         "expected_total_usd": f"{Decimal(sale.expected_total_usd):.2f}",
         "expected_total_bs": f"{Decimal(sale.expected_total_bs):.2f}",
         "primary_service": sale.items[0].service_name_snapshot if sale.items else "-",
+        "notes": sale.notes,
         "items": [
-            {"service": item.service_name_snapshot, "package": item.package_name_snapshot}
+            {
+                "service": item.service_name_snapshot,
+                "package": item.package_name_snapshot,
+                "usd_price": f"{Decimal(item.usd_price):.2f}",
+            }
             for item in sale.items
+        ],
+    }
+
+
+def build_recent_sales_summary(sales: list[Sale], timezone_name: str, *, days: int = 7) -> dict:
+    start_date, end_date, _, _ = last_n_local_day_bounds(timezone_name, days)
+    buckets: dict[date, dict] = {}
+    cursor = start_date
+    while cursor <= end_date:
+        buckets[cursor] = {
+            "label": cursor.strftime("%d/%m"),
+            "sales_count": 0,
+            "total_usd": Decimal("0.00"),
+            "total_bs": Decimal("0.00"),
+        }
+        cursor += timedelta(days=1)
+
+    for sale in sales:
+        sale_day = localize(sale.created_at, timezone_name).date()
+        if sale_day not in buckets:
+            continue
+        buckets[sale_day]["sales_count"] += 1
+        buckets[sale_day]["total_usd"] += Decimal(sale.amount_paid_usd)
+        buckets[sale_day]["total_bs"] += Decimal(sale.amount_paid_bs)
+
+    total_sales = sum(bucket["sales_count"] for bucket in buckets.values())
+    total_usd = sum((bucket["total_usd"] for bucket in buckets.values()), Decimal("0.00"))
+    total_bs = sum((bucket["total_bs"] for bucket in buckets.values()), Decimal("0.00"))
+    avg_ticket = (total_usd / total_sales) if total_sales else Decimal("0.00")
+    best_day_bucket = max(
+        buckets.values(),
+        key=lambda bucket: (bucket["total_usd"], bucket["sales_count"]),
+        default={"label": "--/--", "total_usd": Decimal("0.00"), "sales_count": 0},
+    )
+
+    return {
+        "range_label": f"{start_date.strftime('%d/%m')} - {end_date.strftime('%d/%m')}",
+        "sales_count": total_sales,
+        "total_usd": f"{total_usd:.2f}",
+        "total_bs": f"{total_bs:.2f}",
+        "avg_ticket_usd": f"{avg_ticket:.2f}",
+        "best_day": {
+            "label": best_day_bucket["label"],
+            "total_usd": f"{best_day_bucket['total_usd']:.2f}",
+            "sales_count": best_day_bucket["sales_count"],
+        },
+        "days": [
+            {
+                "label": bucket["label"],
+                "sales_count": bucket["sales_count"],
+                "total_usd": f"{bucket['total_usd']:.2f}",
+                "total_bs": f"{bucket['total_bs']:.2f}",
+            }
+            for bucket in buckets.values()
         ],
     }
 
@@ -717,6 +843,17 @@ def dashboard(
         .order_by(Sale.created_at.desc())
         .limit(5)
     ).unique().all()
+    _, _, summary_start_utc, summary_end_utc = last_n_local_day_bounds(current_user.timezone_name, 7)
+    seven_day_sales = db.scalars(
+        select(Sale)
+        .options(joinedload(Sale.items), joinedload(Sale.payment_method), joinedload(Sale.operator))
+        .where(
+            Sale.operator_id == current_user.id,
+            Sale.created_at >= summary_start_utc,
+            Sale.created_at < summary_end_utc,
+        )
+        .order_by(Sale.created_at.desc())
+    ).unique().all()
 
     context = {
         "payment_methods": payment_methods,
@@ -728,6 +865,7 @@ def dashboard(
         "has_access": bool(payment_methods and allowed_package_ids),
         "can_operate": can_operate,
         "recent_sales": [sale_card_payload(sale) for sale in recent_sales],
+        "recent_sales_summary": build_recent_sales_summary(seven_day_sales, current_user.timezone_name),
         **layout_context(request, current_user),
     }
     return templates.TemplateResponse("dashboard.html", context)
@@ -1144,21 +1282,7 @@ def profile_page(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    setting = get_setting(db)
-    timezone_options = [timezone_name for timezone_name in SUPPORTED_TIMEZONES if timezone_name in available_timezones()]
-    if current_user.timezone_name not in timezone_options:
-        timezone_options.insert(0, current_user.timezone_name)
-
-    return templates.TemplateResponse(
-        "profile.html",
-        {
-            "timezone_options": timezone_options,
-            "days_left": calculate_days_left(current_user.subscription_ends_at, current_user.timezone_name),
-            "support_contact": setting.support_contact,
-            "latest_request": db.scalar(select(DaysExtensionRequest).where(DaysExtensionRequest.user_id == current_user.id).order_by(DaysExtensionRequest.created_at.desc())),
-            **layout_context(request, current_user),
-        },
-    )
+    return templates.TemplateResponse("profile.html", build_profile_context(request, db, current_user))
 
 
 @app.post("/profile")
@@ -1168,30 +1292,29 @@ def update_profile(
     current_user: Annotated[User, Depends(get_current_user)],
     full_name: str = Form(...),
     email: str = Form(...),
-    avatar_url: str = Form(""),
     timezone_name: str = Form(...),
     current_password: str = Form(...),
+    avatar_file: Optional[UploadFile] = File(None),
 ):
     if not verify_password(current_password, current_user.password_hash):
         return templates.TemplateResponse(
             "profile.html",
-            {
-                "request": request,
-                "app_name": settings.app_name,
-                "current_user": current_user,
-                "timezone_options": SUPPORTED_TIMEZONES,
-                "days_left": calculate_days_left(current_user.subscription_ends_at, current_user.timezone_name),
-                "support_contact": get_setting(db).support_contact,
-                "profile_error": "Debes confirmar tu contraseña actual para cambiar datos sensibles.",
-                **sidebar_context(current_user),
-            },
+            build_profile_context(request, db, current_user, profile_error="Debes confirmar tu contraseña actual para cambiar datos sensibles."),
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
     current_user.full_name = full_name
     current_user.email = email
-    current_user.avatar_url = avatar_url or None
     current_user.timezone_name = timezone_name
+    if avatar_file and avatar_file.filename:
+        try:
+            current_user.avatar_url = save_avatar_upload(avatar_file, current_user.id, current_user.avatar_url)
+        except HTTPException as exc:
+            return templates.TemplateResponse(
+                "profile.html",
+                build_profile_context(request, db, current_user, profile_error=str(exc.detail)),
+                status_code=exc.status_code,
+            )
     db.commit()
     return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1248,8 +1371,9 @@ def admin_page(
         .where(Sale.created_at >= retention_since)
         .order_by(Sale.created_at.desc())
     ).unique().all()
+    admin_sales = [sale for sale in sales if not sale.operator.is_admin]
     user_sales_map: dict[int, list[dict]] = {}
-    for sale in sales:
+    for sale in admin_sales:
         if sale.operator.is_admin:
             continue
         user_sales_map.setdefault(sale.operator_id, []).append(sale_card_payload(sale))
@@ -1292,6 +1416,7 @@ def admin_page(
             "admin_users": user_rows,
             "extension_requests": requests,
             "admin_feedback": admin_feedback,
+            "recent_sales_summary": build_recent_sales_summary(admin_sales, current_user.timezone_name),
             **layout_context(request, current_user),
         },
     )
@@ -1429,7 +1554,7 @@ def create_sale(
     package_statement = apply_catalog_owner_filter(package_statement, Service.owner_user_id, current_user)
     packages = db.scalars(package_statement).unique().all()
     package_map = {package.id: package for package in packages}
-    if len(package_map) != len(package_ids):
+    if len(package_map) != len(set(package_ids)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uno o más paquetes no existen.")
 
     setting = get_setting(db)
@@ -1506,4 +1631,9 @@ def create_sale(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La base de datos bloqueó una referencia duplicada para este mes.")
 
-    return JSONResponse({"ok": True, "sale": sale_card_payload(sale)})
+    created_sale = db.scalar(
+        select(Sale)
+        .options(joinedload(Sale.items), joinedload(Sale.payment_method), joinedload(Sale.operator))
+        .where(Sale.id == sale.id)
+    )
+    return JSONResponse({"ok": True, "sale": sale_card_payload(created_sale or sale)})
