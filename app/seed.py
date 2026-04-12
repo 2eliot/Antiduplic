@@ -93,9 +93,9 @@ def seed_database(session: Session) -> None:
     session.add_all(payment_methods)
 
     services = [
-        Service(name="Free Fire", owner_user_id=admin.id, payment_method_id=payment_methods[0].id, notes="Diamantes y membresias", display_order=1, is_default=True),
-        Service(name="Mobile Legends", owner_user_id=admin.id, payment_method_id=payment_methods[2].id, notes="Recargas rapidas", display_order=2),
-        Service(name="Call of Duty Mobile", owner_user_id=admin.id, payment_method_id=payment_methods[1].id, notes="Packs en USD y Bs", display_order=3),
+        Service(name="Free Fire", owner_user_id=admin.id, notes="Diamantes y membresias", display_order=1, is_default=True),
+        Service(name="Mobile Legends", owner_user_id=admin.id, notes="Recargas rapidas", display_order=2),
+        Service(name="Call of Duty Mobile", owner_user_id=admin.id, notes="Packs en USD y Bs", display_order=3),
     ]
     session.add_all(services)
 

@@ -20,7 +20,7 @@
 </section>
 {% endif %}
 
-<div class="reference-layout" data-dashboard-root data-exchange-rate="{{ exchange_rate }}">
+<div class="reference-layout" data-dashboard-root data-exchange-rate="{{ exchange_rate }}" data-timezone="{{ timezone_name }}">
     <section class="workspace-panel workspace-panel--form form-stack compact-panel">
         {% if exchange_rate_feedback %}
         <div class="alert alert--success">{{ exchange_rate_feedback }}</div>

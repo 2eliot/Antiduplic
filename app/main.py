@@ -218,7 +218,7 @@ async def lifespan(_: FastAPI):
             seed_database(session)
         else:
             ensure_initial_admin(session)
-        normalize_service_payment_links(session)
+        clear_service_payment_links(session)
     yield
 
 
@@ -254,19 +254,12 @@ def normalize_currency_code(raw_value: str) -> str:
     return normalized_value
 
 
-def normalize_service_payment_links(db: Session) -> None:
-    services_without_method = db.scalars(select(Service).where(Service.payment_method_id.is_(None))).all()
+def clear_service_payment_links(db: Session) -> None:
+    services_with_method = db.scalars(select(Service).where(Service.payment_method_id.is_not(None))).all()
     changed = False
-    for service in services_without_method:
-        statement = select(PaymentMethod).where(PaymentMethod.is_active.is_(True))
-        if service.owner_user_id is None:
-            statement = statement.where(PaymentMethod.owner_user_id.is_(None))
-        else:
-            statement = statement.where(PaymentMethod.owner_user_id == service.owner_user_id)
-        method = db.scalar(statement.order_by(PaymentMethod.is_default.desc(), PaymentMethod.display_order, PaymentMethod.id))
-        if method:
-            service.payment_method_id = method.id
-            changed = True
+    for service in services_with_method:
+        service.payment_method_id = None
+        changed = True
     if changed:
         db.commit()
 
@@ -434,7 +427,7 @@ def get_managed_payment_methods(db: Session, user: User) -> list[PaymentMethod]:
 
 
 def get_managed_services(db: Session, user: User) -> list[Service]:
-    statement = apply_catalog_owner_filter(select(Service).options(joinedload(Service.packages), joinedload(Service.payment_method)), Service.owner_user_id, user)
+    statement = apply_catalog_owner_filter(select(Service).options(joinedload(Service.packages)), Service.owner_user_id, user)
     statement = statement.order_by(Service.display_order, Service.name)
     return db.scalars(statement).unique().all()
 
@@ -449,19 +442,12 @@ def get_managed_payment_method(db: Session, user: User, method_id: int) -> Payme
 
 
 def get_managed_service(db: Session, user: User, service_id: int) -> Service:
-    statement = select(Service).options(joinedload(Service.payment_method)).where(Service.id == service_id)
+    statement = select(Service).where(Service.id == service_id)
     statement = apply_catalog_owner_filter(statement, Service.owner_user_id, user)
     service = db.scalar(statement)
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado.")
     return service
-
-
-def get_managed_payment_method_for_service(db: Session, user: User, payment_method_id: int) -> PaymentMethod:
-    method = get_managed_payment_method(db, user, payment_method_id)
-    if not method.is_active:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El método de pago seleccionado está inactivo.")
-    return method
 
 
 def get_managed_package(db: Session, user: User, package_id: int) -> Package:
@@ -496,7 +482,7 @@ def get_accessible_services_and_packages(db: Session, user: User) -> tuple[list[
 
     service_statement = (
         select(Service)
-        .options(joinedload(Service.packages), joinedload(Service.payment_method))
+        .options(joinedload(Service.packages))
         .join(Service.packages)
         .where(Service.is_active.is_(True), Package.id.in_(package_ids))
     )
@@ -603,7 +589,6 @@ def serialize_catalog(services: list[Service], exchange_rate: Decimal, allowed_p
             "id": service.id,
             "name": service.name,
             "is_default": service.is_default,
-            "payment_method_id": service.payment_method_id,
             "packages": [
                 {
                     "id": package.id,
@@ -1081,14 +1066,13 @@ def delete_payment_method(
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
 ):
     method = get_managed_payment_method(db, current_user, method_id)
-    linked_services = db.scalar(select(func.count()).select_from(Service).where(Service.payment_method_id == method.id)) or 0
     linked_sales = db.scalar(select(func.count()).select_from(Sale).where(Sale.payment_method_id == method.id)) or 0
-    if linked_services:
-        request.session["payment_methods_error"] = "No puedes borrar este método porque tiene servicios asignados."
-        return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
     if linked_sales:
         request.session["payment_methods_error"] = "No puedes borrar este método porque ya tiene ventas registradas."
         return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
+    legacy_services = db.scalars(select(Service).where(Service.payment_method_id == method.id)).all()
+    for service in legacy_services:
+        service.payment_method_id = None
     db.delete(method)
     db.commit()
     return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
@@ -1108,7 +1092,6 @@ def services_page(
         "services.html",
         {
             "services": services,
-            "payment_methods": get_managed_payment_methods(db, current_user),
             "exchange_rate": exchange_rate,
             "page_error": error_message,
             **layout_context(request, current_user),
@@ -1122,21 +1105,18 @@ def create_service(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
-    payment_method_id: int = Form(...),
     notes: str = Form(""),
     display_order: int = Form(0),
     is_default: bool = Form(False),
 ):
     owner_user_id = current_user.id
     normalized_name = name.strip()
-    payment_method = get_managed_payment_method_for_service(db, current_user, payment_method_id)
     if catalog_name_exists(db, Service, current_user, normalized_name):
         request.session["services_error"] = "Ya existe un servicio con ese nombre."
         return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
     service = Service(
         name=normalized_name,
         owner_user_id=owner_user_id,
-        payment_method_id=payment_method.id,
         notes=notes.strip() or None,
         display_order=display_order,
     )
@@ -1160,19 +1140,16 @@ def update_service(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
-    payment_method_id: int = Form(...),
     notes: str = Form(""),
     display_order: int = Form(0),
     is_default: bool = Form(False),
 ):
     service = get_managed_service(db, current_user, service_id)
     normalized_name = name.strip()
-    payment_method = get_managed_payment_method_for_service(db, current_user, payment_method_id)
     if catalog_name_exists(db, Service, current_user, normalized_name, exclude_id=service.id):
         request.session["services_error"] = "Ya existe un servicio con ese nombre."
         return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
     service.name = normalized_name
-    service.payment_method_id = payment_method.id
     service.notes = notes.strip() or None
     service.display_order = display_order
     if is_default:
@@ -1765,7 +1742,6 @@ def create_sale(
             Package.id.in_(package_ids),
             Package.is_active.is_(True),
             Service.is_active.is_(True),
-            Service.payment_method_id == payment_method.id,
         )
     )
     package_statement = apply_catalog_owner_filter(package_statement, Service.owner_user_id, current_user)

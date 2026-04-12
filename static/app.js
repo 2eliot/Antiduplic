@@ -144,18 +144,14 @@ function setupDashboard() {
 
     bindChoiceGroup("payment-methods", paymentInput, (value) => {
         state.selectedPaymentMethodId = Number(value);
-        state.selectedServiceId = 0;
-        state.cart = [];
         clearPabiloResult();
-        renderServiceChoices();
-        renderCart();
         if (referenceInput.value.trim()) {
             checkReference();
         }
     });
 
     function getServicesForSelectedMethod() {
-        return catalog.filter((service) => service.payment_method_id === state.selectedPaymentMethodId);
+        return catalog;
     }
 
     function renderServiceChoices() {
