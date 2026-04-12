@@ -122,9 +122,7 @@
                         <th>Método</th>
                         <th>Referencia</th>
                         <th>Monto</th>
-                        <th>Servicios</th>
                         <th>Fecha</th>
-                        <th>Validación</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -145,15 +143,7 @@
                                 <span>Bs {{ sale['amount_paid_bs'] }}</span>
                             </div>
                         </td>
-                        <td>
-                            <div class="transaction-package-list">
-                                {% for item in sale['items'] %}
-                                <span class="tag">{{ item.service }} / {{ item.package }}</span>
-                                {% endfor %}
-                            </div>
-                        </td>
                         <td>{{ sale['created_at'] }}</td>
-                        <td>{{ sale['validation_digits_used'] }}d</td>
                         <td>
                             <button
                                 type="button"
@@ -165,7 +155,7 @@
                         </td>
                     </tr>
                     <tr class="history-detail-row is-hidden" data-sale-detail-row="sale-{{ sale['id'] }}">
-                        <td colspan="8">
+                        <td colspan="6">
                             <div class="history-detail-card">
                                 <div class="history-detail-grid">
                                     <div>
@@ -183,6 +173,10 @@
                                     <div>
                                         <span class="history-detail-label">Total Bs</span>
                                         <strong>Bs {{ sale['amount_paid_bs'] }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="history-detail-label">Validación</span>
+                                        <strong>{{ sale['validation_digits_used'] }}d</strong>
                                     </div>
                                 </div>
                                 <div class="history-detail-items">
@@ -202,7 +196,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="no-data">
+                        <td colspan="6" class="no-data">
                             <div class="no-data-title">No hay registros para este filtro.</div>
                             <div class="no-data-subtitle">Prueba otro rango o limpia los filtros.</div>
                         </td>
