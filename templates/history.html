@@ -109,6 +109,24 @@
         </aside>
     </div>
 
+    <section class="history-package-panel">
+        <div class="transactions-header">
+            <h3 class="section-title">Paquetes vendidos</h3>
+            <div class="transactions-summary">Conteo total por paquete dentro del filtro actual</div>
+        </div>
+        <div class="history-package-grid">
+            {% for package in history_dashboard.package_breakdown %}
+            <article class="history-package-card">
+                <span class="history-package-card__eyebrow">Paquete vendido</span>
+                <strong>{{ package.name }}</strong>
+                <span>{{ package.count }} items</span>
+            </article>
+            {% else %}
+            <p class="empty-state">No hay paquetes vendidos para este filtro.</p>
+            {% endfor %}
+        </div>
+    </section>
+
     <section class="transactions-section">
         <div class="transactions-header">
             <h3 class="section-title">Transacciones</h3>

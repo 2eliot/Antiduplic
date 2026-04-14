@@ -701,10 +701,27 @@ def build_history_dashboard(sales: list[Sale], timezone_name: str, *, start_date
     method_counter = Counter(sale.payment_method.name for sale in sales)
     service_counter = Counter(item.service_name_snapshot for sale in sales for item in sale.items)
     package_counter = Counter(item.package_name_snapshot for sale in sales for item in sale.items)
+    package_sales: dict[int, dict[str, int | str]] = {}
+    for sale in sales:
+        for item in sale.items:
+            package_entry = package_sales.setdefault(
+                item.package_id,
+                {
+                    "package_id": item.package_id,
+                    "name": item.package_name_snapshot,
+                    "count": 0,
+                },
+            )
+            package_entry["count"] += 1
+            package_entry["name"] = item.package_name_snapshot
 
     top_method = method_counter.most_common(1)[0] if method_counter else ("Sin datos", 0)
     top_service = service_counter.most_common(1)[0] if service_counter else ("Sin datos", 0)
     top_package = package_counter.most_common(1)[0] if package_counter else ("Sin datos", 0)
+    package_breakdown = [
+        {"name": entry["name"], "count": entry["count"]}
+        for entry in sorted(package_sales.values(), key=lambda entry: (entry["package_id"], str(entry["name"]).lower()))
+    ]
 
     series_map: dict[str, Decimal] = {}
     for sale in sales:
@@ -735,6 +752,7 @@ def build_history_dashboard(sales: list[Sale], timezone_name: str, *, start_date
         "top_method": {"name": top_method[0], "count": top_method[1]},
         "top_service": {"name": top_service[0], "count": top_service[1]},
         "top_package": {"name": top_package[0], "count": top_package[1]},
+        "package_breakdown": package_breakdown,
         "chart_labels": chart_labels,
         "chart_values": chart_values,
     }

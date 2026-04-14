@@ -205,9 +205,10 @@ function setupDashboard() {
 
         packageList.innerHTML = "";
         activeService.packages.forEach((pkg) => {
+            const cartQuantity = state.cart.filter((item) => item.packageId === pkg.id).length;
             const button = document.createElement("button");
             button.type = "button";
-            button.className = "package-button";
+            button.className = `package-button${cartQuantity ? " is-selected" : ""}`;
             button.innerHTML = `<span class="package-button__name">${escapeHtml(pkg.name)}</span><strong>${escapeHtml(pkg.display_price)}</strong>`;
             button.addEventListener("click", () => addPackage(pkg, activeService, button));
             packageList.appendChild(button);
@@ -224,6 +225,7 @@ function setupDashboard() {
             displayPrice: pkg.display_price,
         });
         if (button) {
+            button.classList.add("is-selected");
             button.classList.remove("is-just-added");
             window.requestAnimationFrame(() => button.classList.add("is-just-added"));
             window.setTimeout(() => button.classList.remove("is-just-added"), 260);
@@ -234,6 +236,7 @@ function setupDashboard() {
     function removeFromCart(index) {
         state.cart.splice(index, 1);
         renderCart();
+        renderPackages();
     }
 
     function renderCart() {
