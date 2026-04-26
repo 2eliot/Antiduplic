@@ -610,21 +610,71 @@ function bindChoiceGroup(groupName, input, callback) {
 }
 
 function setupHistoryDetails() {
-    const buttons = document.querySelectorAll("[data-history-detail-toggle]");
-    if (!buttons.length) {
+    const detailButtons = document.querySelectorAll("[data-history-detail-toggle]");
+    const editButtons = document.querySelectorAll("[data-history-edit-toggle]");
+    if (!detailButtons.length && !editButtons.length) {
         return;
     }
 
-    buttons.forEach((button) => {
+    function setDetailVisibility(saleDetailId, visible) {
+        const detailRow = document.querySelector(`[data-sale-detail-row="${saleDetailId}"]`);
+        if (!detailRow) {
+            return null;
+        }
+
+        detailRow.classList.toggle("is-hidden", !visible);
+
+        const detailButton = document.querySelector(`[data-history-detail-toggle][data-sale-detail-id="${saleDetailId}"]`);
+        if (detailButton) {
+            detailButton.setAttribute("aria-expanded", String(visible));
+            detailButton.textContent = visible ? "Ocultar" : "Detalle";
+        }
+
+        return detailRow;
+    }
+
+    detailButtons.forEach((button) => {
         button.addEventListener("click", () => {
             const saleDetailId = button.dataset.saleDetailId;
             const detailRow = document.querySelector(`[data-sale-detail-row="${saleDetailId}"]`);
             if (!detailRow) {
                 return;
             }
-            const isHidden = detailRow.classList.toggle("is-hidden");
-            button.setAttribute("aria-expanded", String(!isHidden));
-            button.textContent = isHidden ? "Detalle" : "Ocultar";
+
+            const nextVisible = detailRow.classList.contains("is-hidden");
+            setDetailVisibility(saleDetailId, nextVisible);
+
+            if (!nextVisible) {
+                detailRow.querySelectorAll("[data-sale-edit-row]").forEach((editRow) => {
+                    editRow.classList.add("is-hidden");
+                });
+                const editButton = document.querySelector(`[data-history-edit-toggle][data-sale-detail-id="${saleDetailId}"]`);
+                if (editButton) {
+                    editButton.setAttribute("aria-expanded", "false");
+                    editButton.textContent = "Editar";
+                }
+            }
+        });
+    });
+
+    editButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            const saleDetailId = button.dataset.saleDetailId;
+            const saleEditId = button.dataset.saleEditId;
+            const detailRow = setDetailVisibility(saleDetailId, true);
+            if (!detailRow) {
+                return;
+            }
+
+            const editSection = detailRow.querySelector(`[data-sale-edit-row="${saleEditId}"]`);
+            if (!editSection) {
+                return;
+            }
+
+            const shouldShow = editSection.classList.contains("is-hidden");
+            editSection.classList.toggle("is-hidden", !shouldShow);
+            button.setAttribute("aria-expanded", String(shouldShow));
+            button.textContent = shouldShow ? "Cancelar" : "Editar";
         });
     });
 }

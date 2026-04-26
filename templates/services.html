@@ -106,6 +106,9 @@
                             <form method="post" action="/packages/{{ package.id }}/toggle" class="table-actions">
                                 <button class="ghost-action" type="submit">{{ 'Desactivar' if package.is_active else 'Reactivar' }}</button>
                             </form>
+                            <form method="post" action="/packages/{{ package.id }}/delete" class="table-actions">
+                                <button class="ghost-action" type="submit">Eliminar paquete</button>
+                            </form>
                         </div>
                     </details>
                     {% endfor %}

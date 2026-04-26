@@ -773,6 +773,17 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
     border-radius: 18px;
     padding: 16px;
 }
+.history-edit-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+.history-edit-section__header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
 .history-detail-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -936,6 +947,7 @@ label { display: block; margin-bottom: 6px; color: #cfc6b8; font-size: 0.68rem; 
 .service-packages { display: flex; flex-direction: column; gap: 10px; }
 .package-editor > * { flex: 1 1 140px; }
 .package-editor > button { flex: 0 0 auto; }
+.history-edit-form { align-items: stretch; }
 .package-editor--new { padding-top: 6px; border-top: 1px solid var(--stroke-soft); }
 .collapsible-panel { padding: 0; overflow: hidden; }
 .collapsible-panel--hero {

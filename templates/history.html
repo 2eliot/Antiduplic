@@ -7,6 +7,13 @@
 </section>
 
 <section class="workspace-panel history-dashboard-panel form-stack" data-history-dashboard>
+    {% if history_feedback %}
+    <div class="alert alert--success">{{ history_feedback }}</div>
+    {% endif %}
+    {% if history_error %}
+    <div class="alert alert--error">{{ history_error }}</div>
+    {% endif %}
+
     <div class="stats-header history-dashboard-header">
         <div class="stats-title-section">
             <h3 class="dashboard-title">Resumen de actividad</h3>
@@ -163,16 +170,26 @@
                         </td>
                         <td>{{ sale['created_at'] }}</td>
                         <td>
-                            <button
-                                type="button"
-                                class="secondary-button secondary-button--compact history-detail-toggle"
-                                data-history-detail-toggle
-                                data-sale-detail-id="sale-{{ sale['id'] }}"
-                                aria-expanded="false"
-                            >Detalle</button>
+                            <div class="table-actions">
+                                <button
+                                    type="button"
+                                    class="secondary-button secondary-button--compact history-detail-toggle"
+                                    data-history-detail-toggle
+                                    data-sale-detail-id="sale-{{ sale['id'] }}"
+                                    aria-expanded="false"
+                                >Detalle</button>
+                                <button
+                                    type="button"
+                                    class="ghost-action history-edit-toggle"
+                                    data-history-edit-toggle
+                                    data-sale-detail-id="sale-{{ sale['id'] }}"
+                                    data-sale-edit-id="sale-edit-{{ sale['id'] }}"
+                                    aria-expanded="false"
+                                >Editar</button>
+                            </div>
                         </td>
                     </tr>
-                    <tr class="history-detail-row is-hidden" data-sale-detail-row="sale-{{ sale['id'] }}">
+                    <tr class="history-detail-row is-hidden" data-sale-detail-row="sale-{{ sale['id'] }}" id="sale-{{ sale['id'] }}">
                         <td colspan="6">
                             <div class="history-detail-card">
                                 <div class="history-detail-grid">
@@ -209,6 +226,25 @@
                                 {% if sale['notes'] %}
                                 <div class="history-detail-note">Nota: {{ sale['notes'] }}</div>
                                 {% endif %}
+                                <div class="history-edit-section is-hidden" data-sale-edit-row="sale-edit-{{ sale['id'] }}">
+                                    <div class="history-edit-section__header">
+                                        <strong>Editar registro</strong>
+                                        <span class="helper-text">Puedes corregir referencia, método de pago y notas. Los paquetes vendidos no cambian desde aquí.</span>
+                                    </div>
+                                    <form method="post" action="/history/sales/{{ sale['id'] }}/update" class="form-stack">
+                                        <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                                        <div class="package-editor history-edit-form">
+                                            <input name="reference" type="text" value="{{ sale['reference_raw'] }}" required>
+                                            <select name="payment_method_id">
+                                                {% for method in payment_methods %}
+                                                <option value="{{ method.id }}"{% if sale['payment_method_id'] == method.id %} selected{% endif %}>{{ method.name }} · {{ method.currency_code }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <input name="notes" type="text" value="{{ sale['notes'] or '' }}" placeholder="Notas opcionales">
+                                            <button class="secondary-button" type="submit">Guardar cambios</button>
+                                        </div>
+                                    </form>
+                                </div>
                             </div>
                         </td>
                     </tr>

@@ -460,6 +460,68 @@ def get_managed_package(db: Session, user: User, package_id: int) -> Package:
     return package
 
 
+def get_owned_sale(db: Session, user: User, sale_id: int) -> Sale:
+    sale = db.scalar(
+        select(Sale)
+        .options(joinedload(Sale.items), joinedload(Sale.payment_method), joinedload(Sale.operator))
+        .where(Sale.id == sale_id, Sale.operator_id == user.id)
+    )
+    if not sale:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro no encontrado.")
+    return sale
+
+
+def normalize_history_return_path(return_to: Optional[str]) -> str:
+    target = (return_to or "").strip()
+    if target.startswith("/history"):
+        return target
+    return "/history"
+
+
+def update_sale_reference_validation(session: Session, sale: Sale, payment_method_id: int, reference: str) -> None:
+    digits = extract_digits(reference)
+    if not digits:
+        raise ValueError("La referencia debe contener números.")
+
+    suffix_6 = build_suffix(digits, 6)
+    suffix_7 = build_suffix(digits, 7) if len(digits) >= 7 else None
+    validation_digits_used = min(len(digits), 6)
+    validation_key = suffix_6
+
+    has_last_6_conflict = session.scalar(
+        select(Sale.id).where(
+            Sale.id != sale.id,
+            Sale.payment_method_id == payment_method_id,
+            Sale.validation_month == sale.validation_month,
+            Sale.validation_key == suffix_6,
+        )
+    ) is not None
+
+    if has_last_6_conflict:
+        if suffix_7 and suffix_7 != suffix_6:
+            has_last_7_conflict = session.scalar(
+                select(Sale.id).where(
+                    Sale.id != sale.id,
+                    Sale.payment_method_id == payment_method_id,
+                    Sale.validation_month == sale.validation_month,
+                    Sale.validation_key == suffix_7,
+                )
+            ) is not None
+            if has_last_7_conflict:
+                raise ValueError("La referencia choca con otro registro del mismo mes para ese método de pago.")
+            validation_digits_used = min(len(digits), 7)
+            validation_key = suffix_7
+        else:
+            raise ValueError("La referencia choca con otro registro del mismo mes para ese método de pago.")
+
+    sale.reference_raw = reference
+    sale.reference_digits = digits
+    sale.reference_last_6 = suffix_6
+    sale.reference_last_7 = suffix_7
+    sale.validation_digits_used = validation_digits_used
+    sale.validation_key = validation_key
+
+
 def get_accessible_payment_methods(db: Session, user: User) -> list[PaymentMethod]:
     statement = select(PaymentMethod).where(PaymentMethod.is_active.is_(True))
     statement = apply_catalog_owner_filter(statement, PaymentMethod.owner_user_id, user)
@@ -614,6 +676,7 @@ def sale_card_payload(sale: Sale) -> dict:
         "id": sale.id,
         "created_at": local_time.strftime("%d/%m/%Y %I:%M %p"),
         "created_day": local_time.strftime("%Y-%m-%d"),
+        "payment_method_id": sale.payment_method_id,
         "payment_method": sale.payment_method.name,
         "payment_method_currency": sale.payment_method.currency_code,
         "operator_username": sale.operator.username,
@@ -961,13 +1024,9 @@ def update_dashboard_exchange_rate(
 
     current_user.exchange_rate_bs = next_rate
 
-    sales = db.scalars(select(Sale).where(Sale.operator_id == current_user.id)).all()
-    for sale in sales:
-        recalculate_sale_exchange_totals(sale, next_rate)
-
     db.commit()
     request.session["dashboard_exchange_rate_feedback"] = (
-        f"Tu tasa fue actualizada a Bs {next_rate:.2f}. Todo tu historial fue recalculado con ese valor."
+        f"Tu tasa fue actualizada a Bs {next_rate:.2f}. Solo las ventas nuevas usarán ese valor."
     )
     return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1277,6 +1336,23 @@ def toggle_package(
     return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@app.post("/packages/{package_id}/delete")
+def delete_package(
+    package_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_catalog_manager_user)],
+):
+    package = get_managed_package(db, current_user, package_id)
+    linked_sale_items = db.scalar(select(func.count()).select_from(SaleItem).where(SaleItem.package_id == package.id)) or 0
+    if linked_sale_items:
+        request.session["services_error"] = "No puedes borrar este paquete porque ya tiene ventas registradas."
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
+    db.delete(package)
+    db.commit()
+    return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @app.get("/history")
 def history_page(
     request: Request,
@@ -1358,12 +1434,16 @@ def history_page(
     payment_methods = get_accessible_payment_methods(db, current_user)
     services, _ = get_accessible_services_and_packages(db, current_user)
     history_dashboard = build_history_dashboard(sales, current_user.timezone_name, start_date=start_date, end_date=end_date)
+    history_feedback = consume_flash_message(request, "history_feedback")
+    history_error = consume_flash_message(request, "history_error")
 
     return templates.TemplateResponse(
         "history.html",
         {
             "sales": [sale_card_payload(sale) for sale in sales],
             "history_dashboard": history_dashboard,
+            "history_feedback": history_feedback,
+            "history_error": history_error,
             "timezone_name": current_user.timezone_name,
             "payment_methods": payment_methods,
             "services": services,
@@ -1379,6 +1459,52 @@ def history_page(
             **layout_context(request, current_user),
         },
     )
+
+
+@app.post("/history/sales/{sale_id}/update")
+def update_history_sale(
+    sale_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    payment_method_id: int = Form(...),
+    reference: str = Form(...),
+    notes: str = Form(""),
+    return_to: str = Form("/history"),
+):
+    sale = get_owned_sale(db, current_user, sale_id)
+    redirect_target = normalize_history_return_path(return_to)
+
+    payment_method_statement = select(PaymentMethod).where(PaymentMethod.id == payment_method_id, PaymentMethod.is_active.is_(True))
+    payment_method_statement = apply_catalog_owner_filter(payment_method_statement, PaymentMethod.owner_user_id, current_user)
+    payment_method = db.scalar(payment_method_statement)
+    if not payment_method:
+        request.session["history_error"] = "El método de pago seleccionado no está disponible."
+        return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
+
+    normalized_reference = reference.strip()
+    if not normalized_reference:
+        request.session["history_error"] = "La referencia no puede quedar vacía."
+        return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        update_sale_reference_validation(db, sale, payment_method.id, normalized_reference)
+    except ValueError as exc:
+        request.session["history_error"] = str(exc)
+        return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
+
+    sale.payment_method_id = payment_method.id
+    sale.notes = notes.strip() or None
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        request.session["history_error"] = "No se pudo guardar el registro porque la referencia quedó duplicada."
+        return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
+
+    request.session["history_feedback"] = f"El registro #{sale.id} fue actualizado correctamente."
+    return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/wipe-data")
