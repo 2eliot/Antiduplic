@@ -240,6 +240,11 @@
                                                 <option value="{{ method.id }}"{% if sale['payment_method_id'] == method.id %} selected{% endif %}>{{ method.name }} · {{ method.currency_code }}</option>
                                                 {% endfor %}
                                             </select>
+                                            <select name="amount_paid_currency">
+                                                <option value="USD"{% if sale['amount_paid_currency'] == 'USD' %} selected{% endif %}>Monto en USD</option>
+                                                <option value="BS"{% if sale['amount_paid_currency'] == 'BS' %} selected{% endif %}>Monto en BS</option>
+                                            </select>
+                                            <input name="amount_paid_value" type="number" min="0.01" step="0.01" value="{{ sale['amount_paid_value'] }}" required>
                                             <input name="notes" type="text" value="{{ sale['notes'] or '' }}" placeholder="Notas opcionales">
                                             <button class="secondary-button" type="submit">Guardar cambios</button>
                                         </div>

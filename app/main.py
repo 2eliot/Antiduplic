@@ -290,6 +290,20 @@ def recalculate_sale_exchange_totals(sale: Sale, exchange_rate: Decimal) -> None
         sale.amount_paid_value = sale.amount_paid_bs
 
 
+def get_sale_exchange_rate(sale: Sale, fallback_rate: Decimal) -> Decimal:
+    amount_paid_usd = Decimal(sale.amount_paid_usd)
+    amount_paid_bs = Decimal(sale.amount_paid_bs)
+    if amount_paid_usd > 0 and amount_paid_bs > 0:
+        return money(amount_paid_bs / amount_paid_usd)
+
+    expected_total_usd = Decimal(sale.expected_total_usd)
+    expected_total_bs = Decimal(sale.expected_total_bs)
+    if expected_total_usd > 0 and expected_total_bs > 0:
+        return money(expected_total_bs / expected_total_usd)
+
+    return money(fallback_rate)
+
+
 def apply_extension_days(user: User, days: int) -> None:
     baseline = user.subscription_ends_at
     if baseline.tzinfo is None:
@@ -679,6 +693,8 @@ def sale_card_payload(sale: Sale) -> dict:
         "payment_method_id": sale.payment_method_id,
         "payment_method": sale.payment_method.name,
         "payment_method_currency": sale.payment_method.currency_code,
+        "amount_paid_value": f"{Decimal(sale.amount_paid_value):.2f}",
+        "amount_paid_currency": sale.amount_paid_currency,
         "operator_username": sale.operator.username,
         "operator_email": sale.operator.email,
         "reference_raw": sale.reference_raw,
@@ -1469,6 +1485,8 @@ def update_history_sale(
     current_user: Annotated[User, Depends(get_current_user)],
     payment_method_id: int = Form(...),
     reference: str = Form(...),
+    amount_paid_value: Decimal = Form(...),
+    amount_paid_currency: str = Form(...),
     notes: str = Form(""),
     return_to: str = Form("/history"),
 ):
@@ -1486,6 +1504,16 @@ def update_history_sale(
     if not normalized_reference:
         request.session["history_error"] = "La referencia no puede quedar vacía."
         return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
+    normalized_amount_paid_value = money(amount_paid_value)
+    if normalized_amount_paid_value <= 0:
+        request.session["history_error"] = "El monto pagado debe ser mayor a cero."
+        return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        normalized_amount_paid_currency = normalize_currency_code(amount_paid_currency)
+    except HTTPException:
+        request.session["history_error"] = "La moneda del monto debe ser USD o BS."
+        return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
 
     try:
         update_sale_reference_validation(db, sale, payment_method.id, normalized_reference)
@@ -1493,7 +1521,18 @@ def update_history_sale(
         request.session["history_error"] = str(exc)
         return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
 
+    setting = get_setting(db)
+    exchange_rate = get_sale_exchange_rate(sale, get_effective_exchange_rate(current_user, setting))
+
     sale.payment_method_id = payment_method.id
+    sale.amount_paid_currency = normalized_amount_paid_currency
+    sale.amount_paid_value = normalized_amount_paid_value
+    if normalized_amount_paid_currency == "USD":
+        sale.amount_paid_usd = normalized_amount_paid_value
+        sale.amount_paid_bs = money(normalized_amount_paid_value * exchange_rate)
+    else:
+        sale.amount_paid_bs = normalized_amount_paid_value
+        sale.amount_paid_usd = money(normalized_amount_paid_value / exchange_rate)
     sale.notes = notes.strip() or None
 
     try:
