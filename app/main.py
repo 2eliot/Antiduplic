@@ -485,6 +485,21 @@ def get_owned_sale(db: Session, user: User, sale_id: int) -> Sale:
     return sale
 
 
+def get_accessible_package(db: Session, user: User, package_id: int) -> Optional[Package]:
+    statement = (
+        select(Package)
+        .options(joinedload(Package.service))
+        .join(Package.service)
+        .where(
+            Package.id == package_id,
+            Package.is_active.is_(True),
+            Service.is_active.is_(True),
+        )
+    )
+    statement = apply_catalog_owner_filter(statement, Service.owner_user_id, user)
+    return db.scalar(statement)
+
+
 def normalize_history_return_path(return_to: Optional[str]) -> str:
     target = (return_to or "").strip()
     if target.startswith("/history"):
@@ -693,6 +708,7 @@ def sale_card_payload(sale: Sale) -> dict:
         "payment_method_id": sale.payment_method_id,
         "payment_method": sale.payment_method.name,
         "payment_method_currency": sale.payment_method.currency_code,
+        "primary_package_id": sale.items[0].package_id if sale.items else None,
         "amount_paid_value": f"{Decimal(sale.amount_paid_value):.2f}",
         "amount_paid_currency": sale.amount_paid_currency,
         "operator_username": sale.operator.username,
@@ -1483,6 +1499,7 @@ def update_history_sale(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    package_id: int = Form(...),
     payment_method_id: int = Form(...),
     reference: str = Form(...),
     amount_paid_value: Decimal = Form(...),
@@ -1498,6 +1515,11 @@ def update_history_sale(
     payment_method = db.scalar(payment_method_statement)
     if not payment_method:
         request.session["history_error"] = "El método de pago seleccionado no está disponible."
+        return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
+
+    package = get_accessible_package(db, current_user, package_id)
+    if not package:
+        request.session["history_error"] = "El paquete seleccionado no está disponible."
         return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
 
     normalized_reference = reference.strip()
@@ -1523,8 +1545,11 @@ def update_history_sale(
 
     setting = get_setting(db)
     exchange_rate = get_sale_exchange_rate(sale, get_effective_exchange_rate(current_user, setting))
+    package_totals = package_price_breakdown(package, exchange_rate)
 
     sale.payment_method_id = payment_method.id
+    sale.expected_total_usd = package_totals["usd"]
+    sale.expected_total_bs = package_totals["bs"]
     sale.amount_paid_currency = normalized_amount_paid_currency
     sale.amount_paid_value = normalized_amount_paid_value
     if normalized_amount_paid_currency == "USD":
@@ -1534,6 +1559,16 @@ def update_history_sale(
         sale.amount_paid_bs = normalized_amount_paid_value
         sale.amount_paid_usd = money(normalized_amount_paid_value / exchange_rate)
     sale.notes = notes.strip() or None
+    sale.items.clear()
+    sale.items.append(
+        SaleItem(
+            service_id=package.service.id,
+            package_id=package.id,
+            service_name_snapshot=package.service.name,
+            package_name_snapshot=package.name,
+            usd_price=package_totals["usd"],
+        )
+    )
 
     try:
         db.commit()

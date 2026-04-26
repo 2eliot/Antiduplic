@@ -235,6 +235,13 @@
                                         <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
                                         <div class="package-editor history-edit-form">
                                             <input name="reference" type="text" value="{{ sale['reference_raw'] }}" required>
+                                            <select name="package_id">
+                                                {% for service in services %}
+                                                {% for package in service.packages | sort(attribute='display_order') if package.is_active %}
+                                                <option value="{{ package.id }}"{% if sale['primary_package_id'] == package.id %} selected{% endif %}>{{ service.name }} · {{ package.name }}</option>
+                                                {% endfor %}
+                                                {% endfor %}
+                                            </select>
                                             <select name="payment_method_id">
                                                 {% for method in payment_methods %}
                                                 <option value="{{ method.id }}"{% if sale['payment_method_id'] == method.id %} selected{% endif %}>{{ method.name }} · {{ method.currency_code }}</option>
