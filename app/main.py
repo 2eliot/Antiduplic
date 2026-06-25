@@ -1397,6 +1397,8 @@ def history_page(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     sale_day: Optional[str] = None,
+    page: int = 1,
+    size: int = 50,
 ):
     setting = get_setting(db)
     since = datetime.now(timezone.utc) - timedelta(days=setting.history_retention_months * 31)
@@ -1462,17 +1464,25 @@ def history_page(
         _, end_utc = local_day_bounds(end_date, current_user.timezone_name)
         statement = statement.where(Sale.created_at >= start_utc, Sale.created_at < end_utc)
 
-    sales = db.scalars(statement).unique().all()
+    all_sales = db.scalars(statement).unique().all()
+    total_count = len(all_sales)
+
+    size = max(1, min(100, size))
+    total_pages = max(1, (total_count + size - 1) // size)
+    page = max(1, min(page, total_pages))
+
+    page_sales = all_sales[(page - 1) * size : page * size]
+
     payment_methods = get_accessible_payment_methods(db, current_user)
     services, _ = get_accessible_services_and_packages(db, current_user)
-    history_dashboard = build_history_dashboard(sales, current_user.timezone_name, start_date=start_date, end_date=end_date)
+    history_dashboard = build_history_dashboard(all_sales, current_user.timezone_name, start_date=start_date, end_date=end_date)
     history_feedback = consume_flash_message(request, "history_feedback")
     history_error = consume_flash_message(request, "history_error")
 
     return templates.TemplateResponse(
         "history.html",
         {
-            "sales": [sale_card_payload(sale) for sale in sales],
+            "sales": [sale_card_payload(sale) for sale in page_sales],
             "history_dashboard": history_dashboard,
             "history_feedback": history_feedback,
             "history_error": history_error,
@@ -1487,6 +1497,14 @@ def history_page(
                 "date_from": start_date.isoformat() if start_date else "",
                 "date_to": end_date.isoformat() if end_date else "",
                 "sale_day": sale_day or "",
+            },
+            "pagination": {
+                "page": page,
+                "size": size,
+                "total_count": total_count,
+                "total_pages": total_pages,
+                "start": (page - 1) * size + 1 if total_count > 0 else 0,
+                "end": min(page * size, total_count),
             },
             **layout_context(request, current_user),
         },

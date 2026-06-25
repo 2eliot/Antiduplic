@@ -271,6 +271,65 @@
                 </tbody>
             </table>
         </div>
+
+        {% if pagination.total_pages > 1 %}
+        <nav class="pagination" aria-label="Paginación del historial">
+            <div class="pagination-info">
+                Mostrando {{ pagination.start }}–{{ pagination.end }} de {{ pagination.total_count }} registros
+            </div>
+            <div class="pagination-controls">
+                {% set params = [] %}
+                {% if filters.q %}{% set params = params + ['q=' + filters.q|urlencode] %}{% endif %}
+                {% if filters.payment_method_id %}{% set params = params + ['payment_method_id=' + filters.payment_method_id|string] %}{% endif %}
+                {% if filters.service_id %}{% set params = params + ['service_id=' + filters.service_id|string] %}{% endif %}
+                {% if filters.preset %}{% set params = params + ['preset=' + filters.preset] %}{% endif %}
+                {% if filters.date_from %}{% set params = params + ['date_from=' + filters.date_from] %}{% endif %}
+                {% if filters.date_to %}{% set params = params + ['date_to=' + filters.date_to] %}{% endif %}
+                {% if filters.sale_day %}{% set params = params + ['sale_day=' + filters.sale_day] %}{% endif %}
+                {% set base_params = '&' + params|join('&') if params else '' %}
+
+                {% if pagination.page > 1 %}
+                <a class="pagination-btn" href="/history?page={{ pagination.page - 1 }}&size={{ pagination.size }}{{ base_params }}" aria-label="Página anterior">&laquo; Anterior</a>
+                {% else %}
+                <span class="pagination-btn pagination-btn--disabled">&laquo; Anterior</span>
+                {% endif %}
+
+                {% set max_visible = 7 %}
+                {% set half = (max_visible // 2)|int %}
+                {% set start_page = [1, pagination.page - half]|max %}
+                {% set end_page = [pagination.total_pages, start_page + max_visible - 1]|min %}
+                {% set start_page = [1, end_page - max_visible + 1]|max %}
+
+                {% if start_page > 1 %}
+                <a class="pagination-btn" href="/history?page=1&size={{ pagination.size }}{{ base_params }}">1</a>
+                {% if start_page > 2 %}
+                <span class="pagination-btn pagination-btn--gap">…</span>
+                {% endif %}
+                {% endif %}
+
+                {% for p in range(start_page, end_page + 1) %}
+                {% if p == pagination.page %}
+                <span class="pagination-btn pagination-btn--active" aria-current="page">{{ p }}</span>
+                {% else %}
+                <a class="pagination-btn" href="/history?page={{ p }}&size={{ pagination.size }}{{ base_params }}">{{ p }}</a>
+                {% endif %}
+                {% endfor %}
+
+                {% if end_page < pagination.total_pages %}
+                {% if end_page < pagination.total_pages - 1 %}
+                <span class="pagination-btn pagination-btn--gap">…</span>
+                {% endif %}
+                <a class="pagination-btn" href="/history?page={{ pagination.total_pages }}&size={{ pagination.size }}{{ base_params }}">{{ pagination.total_pages }}</a>
+                {% endif %}
+
+                {% if pagination.page < pagination.total_pages %}
+                <a class="pagination-btn" href="/history?page={{ pagination.page + 1 }}&size={{ pagination.size }}{{ base_params }}" aria-label="Página siguiente">Siguiente &raquo;</a>
+                {% else %}
+                <span class="pagination-btn pagination-btn--disabled">Siguiente &raquo;</span>
+                {% endif %}
+            </div>
+        </nav>
+        {% endif %}
     </section>
 </section>
 
