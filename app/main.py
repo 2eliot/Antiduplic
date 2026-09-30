@@ -43,6 +43,8 @@ SUPPORTED_TIMEZONES = [
     "UTC",
 ]
 SUPPORTED_CURRENCIES = {"USD", "BS"}
+MAX_REQUESTED_DAYS = 365
+MIN_PASSWORD_LENGTH = 6
 
 
 class SaleItemPayload(BaseModel):
@@ -61,6 +63,7 @@ class CreateSalePayload(BaseModel):
 
 class PabiloReferencePayload(BaseModel):
     reference: str = Field(min_length=1)
+    payment_method_id: int
 
 
 def ensure_database_features() -> None:
@@ -81,6 +84,7 @@ def ensure_database_features() -> None:
             "owner_user_id": "INTEGER",
             "currency_code": "VARCHAR(3) NOT NULL DEFAULT 'BS'",
             "notes": "VARCHAR(255)",
+            "pabilo_enabled": "INTEGER NOT NULL DEFAULT 0" if sqlite_mode else "BOOLEAN NOT NULL DEFAULT FALSE",
         },
         "services": {
             "owner_user_id": "INTEGER",
@@ -89,6 +93,9 @@ def ensure_database_features() -> None:
         },
         "packages": {
             "bs_price": "NUMERIC(12, 2)",
+        },
+        "sales": {
+            "exchange_rate_bs": "NUMERIC(10, 2)",
         },
         "days_extension_requests": {
             "requested_days": "INTEGER NOT NULL DEFAULT 0",
@@ -100,7 +107,7 @@ def ensure_database_features() -> None:
     sqlite_catalog_tables = {
         "payment_methods": {
             "constraint_name": "uq_payment_methods_owner_name",
-            "columns": ["id", "name", "owner_user_id", "currency_code", "notes", "display_order", "is_default", "is_active"],
+            "columns": ["id", "name", "owner_user_id", "currency_code", "notes", "display_order", "is_default", "is_active", "pabilo_enabled"],
             "ddl": """
                 CREATE TABLE payment_methods__new (
                     id INTEGER NOT NULL PRIMARY KEY,
@@ -111,6 +118,7 @@ def ensure_database_features() -> None:
                     display_order INTEGER NOT NULL,
                     is_default BOOLEAN NOT NULL,
                     is_active BOOLEAN NOT NULL,
+                    pabilo_enabled BOOLEAN NOT NULL DEFAULT 0,
                     CONSTRAINT uq_payment_methods_owner_name UNIQUE (owner_user_id, name),
                     FOREIGN KEY(owner_user_id) REFERENCES users (id)
                 )
@@ -283,14 +291,12 @@ def package_price_breakdown(package: Package, exchange_rate: Decimal) -> dict:
     }
 
 
-def recalculate_sale_exchange_totals(sale: Sale, exchange_rate: Decimal) -> None:
-    sale.amount_paid_bs = money(Decimal(sale.amount_paid_usd) * exchange_rate)
-    sale.expected_total_bs = money(Decimal(sale.expected_total_usd) * exchange_rate)
-    if sale.amount_paid_currency == "BS":
-        sale.amount_paid_value = sale.amount_paid_bs
-
-
 def get_sale_exchange_rate(sale: Sale, fallback_rate: Decimal) -> Decimal:
+    # Las ventas nuevas guardan la tasa con la que se registraron. Para ventas
+    # antiguas (sin tasa guardada) se deduce de los montos.
+    if sale.exchange_rate_bs is not None and Decimal(sale.exchange_rate_bs) > 0:
+        return money(Decimal(sale.exchange_rate_bs))
+
     amount_paid_usd = Decimal(sale.amount_paid_usd)
     amount_paid_bs = Decimal(sale.amount_paid_bs)
     if amount_paid_usd > 0 and amount_paid_bs > 0:
@@ -914,7 +920,12 @@ def login(
     normalized_email = (email or username or "").strip().lower()
     if not normalized_email:
         return render_login_template(request, login_error="Debes indicar tu correo.")
-    user = db.scalar(select(User).where(func.lower(User.email) == normalized_email, User.is_active.is_(True)))
+    user = db.scalar(
+        select(User).where(
+            or_(func.lower(User.email) == normalized_email, func.lower(User.username) == normalized_email),
+            User.is_active.is_(True),
+        )
+    )
     if not user or not verify_password(password, user.password_hash):
         return render_login_template(request, login_error="Credenciales inválidas.", login_email=normalized_email)
 
@@ -940,10 +951,10 @@ def register(
         "timezone_name": timezone_name,
     }
 
-    if len(password) < 6:
+    if len(password) < MIN_PASSWORD_LENGTH:
         return render_login_template(
             request,
-            register_error="La contraseña debe tener al menos 6 caracteres.",
+            register_error=f"La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres.",
             register_values=form_values,
         )
     if password != confirm_password:
@@ -956,7 +967,22 @@ def register(
         timezone_name = "America/Caracas"
         form_values["timezone_name"] = timezone_name
 
-    existing_user = db.scalar(select(User).where(User.username == form_values["username"]))
+    if not form_values["username"] or not form_values["full_name"]:
+        return render_login_template(
+            request,
+            register_error="El nombre y el usuario no pueden quedar vacíos.",
+            register_values=form_values,
+        )
+
+    # El login no distingue mayúsculas, así que "Admin" y "admin" serían la misma cuenta.
+    existing_user = db.scalar(
+        select(User).where(
+            or_(
+                func.lower(User.username) == form_values["username"].lower(),
+                func.lower(User.email) == form_values["username"].lower(),
+            )
+        )
+    )
     if existing_user:
         return render_login_template(
             request,
@@ -964,7 +990,7 @@ def register(
             register_values=form_values,
         )
 
-    existing_email = db.scalar(select(User).where(User.email == form_values["email"]))
+    existing_email = db.scalar(select(User).where(func.lower(User.email) == form_values["email"]))
     if existing_email:
         return render_login_template(
             request,
@@ -1091,10 +1117,14 @@ def create_payment_method(
     notes: str = Form(""),
     display_order: int = Form(0),
     is_default: bool = Form(False),
+    pabilo_enabled: bool = Form(False),
 ):
     owner_user_id = current_user.id
     normalized_name = name.strip()
     normalized_currency = normalize_currency_code(currency_code)
+    if not normalized_name:
+        request.session["payment_methods_error"] = "El nombre no puede quedar vacío."
+        return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
     if catalog_name_exists(db, PaymentMethod, current_user, normalized_name):
         request.session["payment_methods_error"] = "Ya existe un método de pago con ese nombre."
         return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
@@ -1104,6 +1134,7 @@ def create_payment_method(
         currency_code=normalized_currency,
         notes=notes.strip() or None,
         display_order=display_order,
+        pabilo_enabled=pabilo_enabled,
     )
     db.add(method)
     try:
@@ -1129,10 +1160,14 @@ def update_payment_method(
     notes: str = Form(""),
     display_order: int = Form(0),
     is_default: bool = Form(False),
+    pabilo_enabled: bool = Form(False),
 ):
     method = get_managed_payment_method(db, current_user, method_id)
     normalized_name = name.strip()
     normalized_currency = normalize_currency_code(currency_code)
+    if not normalized_name:
+        request.session["payment_methods_error"] = "El nombre no puede quedar vacío."
+        return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
     if catalog_name_exists(db, PaymentMethod, current_user, normalized_name, exclude_id=method.id):
         request.session["payment_methods_error"] = "Ya existe un método de pago con ese nombre."
         return RedirectResponse("/payment-methods", status_code=status.HTTP_303_SEE_OTHER)
@@ -1140,6 +1175,7 @@ def update_payment_method(
     method.currency_code = normalized_currency
     method.notes = notes.strip() or None
     method.display_order = display_order
+    method.pabilo_enabled = pabilo_enabled
     if is_default:
         set_payment_method_default(db, method.id, method.owner_user_id)
     elif method.is_default:
@@ -1197,11 +1233,17 @@ def services_page(
     exchange_rate = get_effective_exchange_rate(current_user, setting)
     services = get_managed_services(db, current_user)
     error_message = consume_flash_message(request, "services_error")
+    price_map = {
+        package.id: package_price_breakdown(package, exchange_rate)
+        for service in services
+        for package in service.packages
+    }
     return templates.TemplateResponse(
         "services.html",
         {
             "services": services,
             "exchange_rate": exchange_rate,
+            "price_map": price_map,
             "page_error": error_message,
             **layout_context(request, current_user),
         },
@@ -1220,6 +1262,9 @@ def create_service(
 ):
     owner_user_id = current_user.id
     normalized_name = name.strip()
+    if not normalized_name:
+        request.session["services_error"] = "El nombre no puede quedar vacío."
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
     if catalog_name_exists(db, Service, current_user, normalized_name):
         request.session["services_error"] = "Ya existe un servicio con ese nombre."
         return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
@@ -1255,6 +1300,9 @@ def update_service(
 ):
     service = get_managed_service(db, current_user, service_id)
     normalized_name = name.strip()
+    if not normalized_name:
+        request.session["services_error"] = "El nombre no puede quedar vacío."
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
     if catalog_name_exists(db, Service, current_user, normalized_name, exclude_id=service.id):
         request.session["services_error"] = "Ya existe un servicio con ese nombre."
         return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
@@ -1311,9 +1359,20 @@ def delete_service(
     return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
 
 
+def validate_package_input(name: str, price_currency: str, price_value: Decimal) -> Optional[str]:
+    if not name.strip():
+        return "El nombre del paquete no puede quedar vacío."
+    if (price_currency or "").strip().upper() not in SUPPORTED_CURRENCIES:
+        return "La moneda del paquete debe ser USD o BS."
+    if money(price_value) <= 0:
+        return "El precio del paquete debe ser mayor a 0."
+    return None
+
+
 @app.post("/services/{service_id}/packages")
 def create_package(
     service_id: int,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
@@ -1322,6 +1381,11 @@ def create_package(
     display_order: int = Form(0),
 ):
     get_managed_service(db, current_user, service_id)
+    problem = validate_package_input(name, price_currency, price_value)
+    if problem:
+        request.session["services_error"] = problem
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
+    price_currency = price_currency.strip().upper()
     package = Package(service_id=service_id, name=name.strip(), usd_price=Decimal("0.00"), display_order=display_order)
     if price_currency == "BS":
         package.bs_price = money(price_value)
@@ -1336,6 +1400,7 @@ def create_package(
 @app.post("/packages/{package_id}/update")
 def update_package(
     package_id: int,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_catalog_manager_user)],
     name: str = Form(...),
@@ -1344,6 +1409,11 @@ def update_package(
     display_order: int = Form(0),
 ):
     package = get_managed_package(db, current_user, package_id)
+    problem = validate_package_input(name, price_currency, price_value)
+    if problem:
+        request.session["services_error"] = problem
+        return RedirectResponse("/services", status_code=status.HTTP_303_SEE_OTHER)
+    price_currency = price_currency.strip().upper()
     package.name = name.strip()
     package.display_order = display_order
     if price_currency == "BS":
@@ -1419,8 +1489,8 @@ def history_page(
                 User.username.ilike(query),
             )
         )
-    payment_method_filter = int(payment_method_id) if payment_method_id else None
-    service_filter = int(service_id) if service_id else None
+    payment_method_filter = int(payment_method_id) if payment_method_id and payment_method_id.isdigit() else None
+    service_filter = int(service_id) if service_id and service_id.isdigit() else None
     if payment_method_filter:
         statement = statement.where(Sale.payment_method_id == payment_method_filter)
     if service_filter:
@@ -1528,14 +1598,23 @@ def update_history_sale(
     sale = get_owned_sale(db, current_user, sale_id)
     redirect_target = normalize_history_return_path(return_to)
 
-    payment_method_statement = select(PaymentMethod).where(PaymentMethod.id == payment_method_id, PaymentMethod.is_active.is_(True))
-    payment_method_statement = apply_catalog_owner_filter(payment_method_statement, PaymentMethod.owner_user_id, current_user)
-    payment_method = db.scalar(payment_method_statement)
+    # Mantener el método y el paquete originales siempre se permite, aunque hoy estén
+    # desactivados; solo al cambiarlos se exige que el nuevo esté activo.
+    if payment_method_id == sale.payment_method_id:
+        payment_method = sale.payment_method
+    else:
+        payment_method_statement = select(PaymentMethod).where(PaymentMethod.id == payment_method_id, PaymentMethod.is_active.is_(True))
+        payment_method_statement = apply_catalog_owner_filter(payment_method_statement, PaymentMethod.owner_user_id, current_user)
+        payment_method = db.scalar(payment_method_statement)
     if not payment_method:
         request.session["history_error"] = "El método de pago seleccionado no está disponible."
         return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
 
-    package = get_accessible_package(db, current_user, package_id)
+    current_primary = sale.items[0] if sale.items else None
+    if current_primary is not None and package_id == current_primary.package_id:
+        package = current_primary.package
+    else:
+        package = get_accessible_package(db, current_user, package_id)
     if not package:
         request.session["history_error"] = "El paquete seleccionado no está disponible."
         return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
@@ -1562,31 +1641,58 @@ def update_history_sale(
         return RedirectResponse(redirect_target, status_code=status.HTTP_303_SEE_OTHER)
 
     setting = get_setting(db)
+    # Siempre la tasa con la que se registró la venta, nunca la tasa actual del usuario.
     exchange_rate = get_sale_exchange_rate(sale, get_effective_exchange_rate(current_user, setting))
-    package_totals = package_price_breakdown(package, exchange_rate)
+    if sale.exchange_rate_bs is None:
+        sale.exchange_rate_bs = exchange_rate
 
     sale.payment_method_id = payment_method.id
-    sale.expected_total_usd = package_totals["usd"]
-    sale.expected_total_bs = package_totals["bs"]
-    sale.amount_paid_currency = normalized_amount_paid_currency
-    sale.amount_paid_value = normalized_amount_paid_value
-    if normalized_amount_paid_currency == "USD":
-        sale.amount_paid_usd = normalized_amount_paid_value
-        sale.amount_paid_bs = money(normalized_amount_paid_value * exchange_rate)
-    else:
-        sale.amount_paid_bs = normalized_amount_paid_value
-        sale.amount_paid_usd = money(normalized_amount_paid_value / exchange_rate)
     sale.notes = notes.strip() or None
-    sale.items.clear()
-    sale.items.append(
-        SaleItem(
-            service_id=package.service.id,
-            package_id=package.id,
-            service_name_snapshot=package.service.name,
-            package_name_snapshot=package.name,
-            usd_price=package_totals["usd"],
-        )
+
+    # El monto solo se recalcula si el usuario cambió el valor o la moneda.
+    amount_changed = (
+        normalized_amount_paid_currency != sale.amount_paid_currency
+        or normalized_amount_paid_value != money(Decimal(sale.amount_paid_value))
     )
+    if amount_changed:
+        sale.amount_paid_currency = normalized_amount_paid_currency
+        sale.amount_paid_value = normalized_amount_paid_value
+        if normalized_amount_paid_currency == "USD":
+            sale.amount_paid_usd = normalized_amount_paid_value
+            sale.amount_paid_bs = money(normalized_amount_paid_value * exchange_rate)
+        else:
+            sale.amount_paid_bs = normalized_amount_paid_value
+            sale.amount_paid_usd = money(normalized_amount_paid_value / exchange_rate)
+
+    # El formulario solo edita el paquete principal: si no cambió, los ítems y
+    # totales esperados quedan intactos; si cambió, se reemplaza solo ese ítem.
+    primary_item = sale.items[0] if sale.items else None
+    if primary_item is None or primary_item.package_id != package.id:
+        new_totals = package_price_breakdown(package, exchange_rate)
+        if primary_item is not None:
+            old_usd = money(Decimal(primary_item.usd_price))
+            sale.expected_total_usd = money(Decimal(sale.expected_total_usd) - old_usd + new_totals["usd"])
+            if len(sale.items) == 1:
+                sale.expected_total_bs = new_totals["bs"]
+            else:
+                sale.expected_total_bs = money(Decimal(sale.expected_total_bs) - money(old_usd * exchange_rate) + new_totals["bs"])
+            primary_item.service_id = package.service.id
+            primary_item.package_id = package.id
+            primary_item.service_name_snapshot = package.service.name
+            primary_item.package_name_snapshot = package.name
+            primary_item.usd_price = new_totals["usd"]
+        else:
+            sale.expected_total_usd = new_totals["usd"]
+            sale.expected_total_bs = new_totals["bs"]
+            sale.items.append(
+                SaleItem(
+                    service_id=package.service.id,
+                    package_id=package.id,
+                    service_name_snapshot=package.service.name,
+                    package_name_snapshot=package.name,
+                    usd_price=new_totals["usd"],
+                )
+            )
 
     try:
         db.commit()
@@ -1623,10 +1729,10 @@ def wipe_range(
     start_date: str = Form(...),
     end_date: str = Form(...),
 ):
-    start_day = datetime.strptime(start_date, "%Y-%m-%d").date()
-    end_day = datetime.strptime(end_date, "%Y-%m-%d").date()
-    if end_day < start_day:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La fecha final debe ser mayor o igual a la inicial.")
+    start_day = parse_iso_date(start_date)
+    end_day = parse_iso_date(end_date)
+    if not start_day or not end_day or end_day < start_day:
+        return RedirectResponse("/wipe-data", status_code=status.HTTP_303_SEE_OTHER)
     start_utc, _ = local_day_bounds(start_day, current_user.timezone_name)
     _, end_utc = local_day_bounds(end_day, current_user.timezone_name)
     sales = db.scalars(
@@ -1647,7 +1753,7 @@ def wipe_all_data(
     confirmation_text: str = Form(...),
 ):
     if confirmation_text.strip().upper() != "BORRAR TODO":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Debes escribir "BORRAR TODO" para confirmar.')
+        return RedirectResponse("/wipe-data", status_code=status.HTTP_303_SEE_OTHER)
     sales = db.scalars(select(Sale).options(joinedload(Sale.items)).where(Sale.operator_id == current_user.id)).unique().all()
     for sale in sales:
         db.delete(sale)
@@ -1661,7 +1767,8 @@ def profile_page(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    return templates.TemplateResponse("profile.html", build_profile_context(request, db, current_user))
+    profile_error = consume_flash_message(request, "profile_error")
+    return templates.TemplateResponse("profile.html", build_profile_context(request, db, current_user, profile_error=profile_error))
 
 
 @app.post("/profile")
@@ -1699,6 +1806,22 @@ def update_profile(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
+    profile_problem = None
+    if not normalized_full_name:
+        profile_problem = "El nombre no puede quedar vacío."
+    elif "@" not in normalized_email:
+        profile_problem = "Escribe un correo válido."
+    elif normalized_email != current_user.email and db.scalar(
+        select(User.id).where(func.lower(User.email) == normalized_email, User.id != current_user.id)
+    ):
+        profile_problem = "Ese correo ya está en uso por otra cuenta."
+    if profile_problem:
+        return templates.TemplateResponse(
+            "profile.html",
+            build_profile_context(request, db, current_user, profile_error=profile_problem),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
     current_user.full_name = normalized_full_name
     current_user.email = normalized_email
     current_user.timezone_name = normalized_timezone
@@ -1720,13 +1843,18 @@ def update_profile(
 
 @app.post("/profile/password")
 def update_password(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     current_password: str = Form(...),
     new_password: str = Form(...),
 ):
     if not verify_password(current_password, current_user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La contraseña actual no coincide.")
+        request.session["profile_error"] = "La contraseña actual no coincide."
+        return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
+    if len(new_password.strip()) < MIN_PASSWORD_LENGTH:
+        request.session["profile_error"] = f"La nueva contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres."
+        return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     current_user.password_hash = hash_password(new_password)
     db.commit()
     return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
@@ -1734,11 +1862,15 @@ def update_password(
 
 @app.post("/profile/request-days")
 def request_more_days(
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     requested_days: int = Form(...),
     message: str = Form("Necesito extender mi acceso"),
 ):
+    if not (1 <= requested_days <= MAX_REQUESTED_DAYS):
+        request.session["profile_error"] = f"Puedes solicitar entre 1 y {MAX_REQUESTED_DAYS} días."
+        return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
     db.add(DaysExtensionRequest(user_id=current_user.id, requested_days=requested_days, message=message.strip() or "Necesito extender mi acceso"))
     db.commit()
     return RedirectResponse("/profile", status_code=status.HTTP_303_SEE_OTHER)
@@ -1882,7 +2014,8 @@ def toggle_user_active(
     _: Annotated[User, Depends(get_admin_user)],
 ):
     user = db.get(User, user_id)
-    if not user:
+    # Un administrador no puede desactivarse a sí mismo ni a otro admin (quedaría bloqueado).
+    if not user or user.is_admin:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
     user.is_active = not user.is_active
     db.commit()
@@ -1899,6 +2032,11 @@ def review_extension_request(
     extension_request = db.get(DaysExtensionRequest, request_id)
     if not extension_request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solicitud no encontrada.")
+    # Solo se revisa una vez: evita sumar los días dos veces (doble clic, botón atrás).
+    if extension_request.status != "pending" or status_value not in {"approved", "rejected"}:
+        return RedirectResponse("/admin", status_code=status.HTTP_303_SEE_OTHER)
+    if not (1 <= extension_request.requested_days <= MAX_REQUESTED_DAYS):
+        status_value = "rejected"
     extension_request.status = status_value
     extension_request.reviewed_at = datetime.now(timezone.utc)
     extension_request.reviewed_by_id = admin_user.id
@@ -1932,6 +2070,11 @@ def verify_reference_with_pabilo(
 ):
     if not user_can_verify_pabilo(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tu usuario no tiene habilitada la verificación con Pabilo.")
+
+    accessible_methods = {method.id: method for method in get_accessible_payment_methods(db, current_user)}
+    payment_method = accessible_methods.get(payload.payment_method_id)
+    if not payment_method or not payment_method.pabilo_enabled:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Este método de pago no tiene activada la verificación con Pabilo.")
 
     owner_user = get_pabilo_credentials_owner(db, current_user)
     if not owner_user or not owner_user.pabilo_api_key or not owner_user.pabilo_user_bank_id:
@@ -1991,6 +2134,8 @@ def create_sale(
     price_breakdowns = {package.id: package_price_breakdown(package, exchange_rate) for package in packages}
     expected_total_usd = money(sum(price_breakdowns[item.package_id]["usd"] for item in payload.items))
     expected_total_bs = money(sum(price_breakdowns[item.package_id]["bs"] for item in payload.items))
+    if expected_total_usd <= 0 and expected_total_bs <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El total del pedido debe ser mayor a 0. Revisa el precio de los paquetes.")
 
     if payload.amount_paid_value is None or not payload.amount_paid_currency:
         amount_paid_currency = payment_method.currency_code
@@ -2039,11 +2184,11 @@ def create_sale(
         amount_paid_bs=amount_paid_bs,
         expected_total_usd=expected_total_usd,
         expected_total_bs=expected_total_bs,
+        exchange_rate_bs=exchange_rate,
         payment_method_id=payment_method.id,
         operator_id=current_user.id,
         notes=payload.notes,
     )
-    recalculate_sale_exchange_totals(sale, exchange_rate)
     db.add(sale)
     db.flush()
 

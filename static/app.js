@@ -1,5 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
     setupSidebar();
+    setupRateModal();
+    setupDetailsPersistence();
+    setupPricePreview();
     setupAuthPanels();
     setupDashboard();
     setupHistoryDetails();
@@ -77,25 +80,162 @@ function setupAuthPanels() {
     activate(defaultTab);
 }
 
+// Menú hamburguesa: el menú permanece oculto y se despliega hacia abajo al tocar el botón.
 function setupSidebar() {
-    const shell = document.querySelector(".shell");
-    const sidebar = document.querySelector("[data-sidebar]");
-    const toggle = document.querySelector("[data-sidebar-toggle]");
-    if (!sidebar || !toggle || !shell) {
+    const menu = document.querySelector("[data-menu]");
+    const toggle = document.querySelector("[data-menu-toggle]");
+    if (!menu || !toggle) {
         return;
     }
 
-    function syncShellState() {
-        shell.classList.toggle("shell--sidebar-collapsed", sidebar.classList.contains("is-collapsed"));
+    function setOpen(open) {
+        menu.classList.toggle("is-open", open);
+        toggle.classList.toggle("is-open", open);
+        toggle.setAttribute("aria-expanded", String(open));
+        toggle.setAttribute("aria-label", open ? "Cerrar menú" : "Abrir menú");
     }
 
-    toggle.addEventListener("click", () => {
-        sidebar.classList.toggle("is-collapsed");
-        toggle.textContent = sidebar.classList.contains("is-collapsed") ? "⟩" : "⟨";
-        syncShellState();
+    toggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setOpen(!menu.classList.contains("is-open"));
     });
 
-    syncShellState();
+    document.addEventListener("click", (event) => {
+        if (menu.classList.contains("is-open") && !menu.contains(event.target)) {
+            setOpen(false);
+        }
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && menu.classList.contains("is-open")) {
+            setOpen(false);
+            toggle.focus();
+        }
+    });
+}
+
+// El botón "Tasa Bs X" del resumen abre una ventana emergente para cambiar la tasa.
+function setupRateModal() {
+    const openButton = document.getElementById("open_rate_modal");
+    const modal = document.getElementById("rate_modal");
+    const closeButton = document.getElementById("close_rate_modal");
+    if (!openButton || !modal) {
+        return;
+    }
+    const input = modal.querySelector("input[name=exchange_rate_bs]");
+    const initialValue = input ? input.value : "";
+
+    function close() {
+        modal.classList.add("is-hidden");
+        if (input) {
+            input.value = initialValue;
+        }
+        openButton.focus();
+    }
+
+    openButton.addEventListener("click", () => {
+        modal.classList.remove("is-hidden");
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    });
+    if (closeButton) {
+        closeButton.addEventListener("click", close);
+    }
+    modal.addEventListener("click", (event) => {
+        if (event.target === modal) {
+            close();
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !modal.classList.contains("is-hidden")) {
+            close();
+        }
+    });
+}
+
+function roundMoney(value) {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+// Muestra en vivo el equivalente del precio de un paquete en la otra moneda,
+// usando la tasa del usuario (la misma con la que se registran las ventas).
+function setupPricePreview() {
+    const rateHolder = document.querySelector("[data-exchange-rate]");
+    const exchangeRate = rateHolder ? Number(rateHolder.dataset.exchangeRate) : 0;
+    const previews = document.querySelectorAll("[data-price-preview]");
+    if (!previews.length || !(exchangeRate > 0)) {
+        return;
+    }
+
+    previews.forEach((preview) => {
+        const form = preview.closest("form");
+        const currencyInput = form.querySelector("[name=price_currency]");
+        const priceInput = form.querySelector("[name=price_value]");
+        if (!currencyInput || !priceInput) {
+            return;
+        }
+
+        const update = () => {
+            const value = Number(priceInput.value);
+            if (!(value > 0)) {
+                preview.textContent = `Tasa Bs ${exchangeRate.toFixed(2)}`;
+                return;
+            }
+            preview.textContent = currencyInput.value === "BS"
+                ? `≈ USD ${roundMoney(value / exchangeRate).toFixed(2)} (tasa Bs ${exchangeRate.toFixed(2)})`
+                : `≈ Bs ${roundMoney(value * exchangeRate).toFixed(2)} (tasa Bs ${exchangeRate.toFixed(2)})`;
+        };
+        currencyInput.addEventListener("change", update);
+        priceInput.addEventListener("input", update);
+        update();
+    });
+}
+
+// Al guardar un formulario del catálogo la página se recarga: recordamos qué
+// desplegables estaban abiertos y la posición de scroll para volver al mismo sitio.
+// El desplegable que contiene el formulario guardado se cierra si tiene data-collapse-on-save.
+function setupDetailsPersistence() {
+    const detailsList = document.querySelectorAll("details[data-details-key]");
+    if (!detailsList.length) {
+        return;
+    }
+
+    const storageKey = `antiduplic-open-details:${window.location.pathname}`;
+
+    document.querySelectorAll("form").forEach((form) => {
+        form.addEventListener("submit", () => {
+            const container = form.closest("details[data-details-key]");
+            const collapseKey = container && container.hasAttribute("data-collapse-on-save")
+                ? container.dataset.detailsKey
+                : null;
+            const openKeys = Array.from(detailsList)
+                .filter((item) => item.open && item.dataset.detailsKey !== collapseKey)
+                .map((item) => item.dataset.detailsKey);
+            try {
+                sessionStorage.setItem(storageKey, JSON.stringify({ openKeys, scrollY: window.scrollY }));
+            } catch (error) {}
+        });
+    });
+
+    let saved = null;
+    try {
+        saved = JSON.parse(sessionStorage.getItem(storageKey) || "null");
+        sessionStorage.removeItem(storageKey);
+    } catch (error) {}
+    if (!saved) {
+        return;
+    }
+
+    detailsList.forEach((item) => {
+        item.open = saved.openKeys.includes(item.dataset.detailsKey);
+    });
+
+    // Si hubo un error de validación, se muestra arriba: no movemos el scroll.
+    if (!document.querySelector(".alert--error")) {
+        window.scrollTo(0, saved.scrollY || 0);
+    }
 }
 
 function setupDashboard() {
@@ -142,8 +282,20 @@ function setupDashboard() {
         pabiloResult: null,
     };
 
+    // "Verificar en Pabilo" solo aparece si el método elegido lo tiene activado.
+    function syncPabiloVisibility(methodId) {
+        const methodButton = document.querySelector(`[data-select-group="payment-methods"] [data-value="${methodId}"]`);
+        const enabled = Boolean(methodButton && methodButton.dataset.pabilo === "1");
+        document.querySelectorAll("[data-pabilo-only]").forEach((element) => element.classList.toggle("is-hidden", !enabled));
+        const shell = document.getElementById("reference_shell");
+        if (shell) {
+            shell.classList.toggle("reference-shell--with-pabilo", enabled && Boolean(document.getElementById("verify_pabilo_button")));
+        }
+    }
+
     bindChoiceGroup("payment-methods", paymentInput, (value) => {
         state.selectedPaymentMethodId = Number(value);
+        syncPabiloVisibility(value);
         clearPabiloResult();
         if (referenceInput.value.trim()) {
             checkReference();
@@ -208,10 +360,15 @@ function setupDashboard() {
             const button = document.createElement("button");
             button.type = "button";
             button.className = "package-button";
-            button.innerHTML = `<span class="package-button__name">${escapeHtml(pkg.name)}</span><strong>${escapeHtml(pkg.display_price)}</strong>`;
+            button.innerHTML = `<span class="package-button__name">${escapeHtml(pkg.name)}</span><strong>${escapeHtml(pkg.display_price)}</strong><small class="package-button__alt">≈ ${escapeHtml(secondaryPrice(pkg))}</small>`;
             button.addEventListener("click", () => addPackage(pkg, activeService, button));
             packageList.appendChild(button);
         });
+    }
+
+    // El precio principal es el que se definió en el paquete; el otro se calcula con la tasa.
+    function secondaryPrice(pkg) {
+        return pkg.display_currency === "BS" ? `USD ${pkg.usd_price}` : `Bs ${pkg.bs_price}`;
     }
 
     function addPackage(pkg, service, button) {
@@ -222,6 +379,7 @@ function setupDashboard() {
             usdPrice: Number(pkg.usd_price),
             bsPrice: Number(pkg.bs_price),
             displayPrice: pkg.display_price,
+            secondaryPrice: secondaryPrice(pkg),
         });
         if (button) {
             button.classList.remove("is-just-added");
@@ -246,21 +404,23 @@ function setupDashboard() {
         }
 
         cartItems.innerHTML = "";
-        const usdTotal = state.cart.reduce((sum, item) => sum + item.usdPrice, 0);
-        const bsTotal = state.cart.reduce((sum, item) => sum + item.bsPrice, 0);
+        // Se suman céntimos enteros para evitar errores de redondeo de JavaScript.
+        const usdTotal = state.cart.reduce((sum, item) => sum + Math.round(item.usdPrice * 100), 0) / 100;
+        const bsTotal = state.cart.reduce((sum, item) => sum + Math.round(item.bsPrice * 100), 0) / 100;
 
         state.cart.forEach((item, index) => {
             const article = document.createElement("article");
             article.className = "cart-item";
             article.innerHTML = `
                 <div class="cart-item__meta">
-                    <strong>${item.serviceName}</strong>
-                    <span>${item.packageName}</span>
+                    <strong>${escapeHtml(item.serviceName)}</strong>
+                    <span>${escapeHtml(item.packageName)}</span>
                 </div>
-                <div class="cart-item__meta">
-                    <strong>${item.displayPrice}</strong>
-                    <button type="button" class="icon-button remove-button" aria-label="Quitar item">×</button>
+                <div class="cart-item__meta cart-item__price">
+                    <strong>${escapeHtml(item.displayPrice)}</strong>
+                    <span>≈ ${escapeHtml(item.secondaryPrice)}</span>
                 </div>
+                <button type="button" class="icon-button remove-button" aria-label="Quitar item">×</button>
             `;
             article.querySelector(".remove-button").addEventListener("click", () => removeFromCart(index));
             cartItems.appendChild(article);
@@ -494,7 +654,7 @@ function setupDashboard() {
                 const response = await fetch("/api/pabilo/verify-reference", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ reference }),
+                    body: JSON.stringify({ reference, payment_method_id: Number(paymentInput.value) }),
                 });
                 const body = await response.json();
                 if (!response.ok) {
@@ -565,8 +725,24 @@ function setupDashboard() {
         renderCart();
         prependRecentSale(body.sale);
         showFeedback(`Venta #${body.sale.id} registrada correctamente.`, "success");
+        showSaleToast(body.sale.id);
         registerButton.disabled = false;
     });
+
+    function showSaleToast(saleId) {
+        document.querySelectorAll(".sale-toast").forEach((item) => item.remove());
+        const toast = document.createElement("div");
+        toast.className = "sale-toast";
+        toast.setAttribute("role", "status");
+        toast.innerHTML = `
+            <div class="sale-toast__icon">✓</div>
+            <strong>Venta registrada con éxito</strong>
+            <span>Venta #${escapeHtml(saleId)}</span>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.classList.add("is-leaving"), 1700);
+        setTimeout(() => toast.remove(), 2000);
+    }
 
     function showFeedback(message, type) {
         feedback.className = `alert alert--${type}`;

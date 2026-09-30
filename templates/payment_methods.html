@@ -29,6 +29,7 @@
             <input name="notes" type="text" placeholder="Notas o uso recomendado">
             <input name="display_order" type="number" min="0" value="0" required>
             <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"> Predeterminado</label>
+            <label class="checkbox-line"><input type="checkbox" name="pabilo_enabled" value="true"> Verificar con Pabilo</label>
             <button class="primary-button primary-button--compact" type="submit">Guardar método</button>
         </form>
     </div>
@@ -36,7 +37,7 @@
 
 <section class="cards-grid cards-grid--mosaic cards-grid--stretch">
     {% for method in payment_methods %}
-    <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card">
+    <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card" data-details-key="method-{{ method.id }}" data-collapse-on-save>
         <summary class="collapsible-summary collapsible-summary--card">
             <div class="catalog-card__copy">
                 <h3>{{ method.name }}</h3>
@@ -48,12 +49,13 @@
                     <span class="tag">{{ method.currency_code }}</span>
                     <span class="tag">Orden {{ method.display_order }}</span>
                     <span class="tag">{{ 'Activo' if method.is_active else 'Inactivo' }}</span>
+                    {% if method.pabilo_enabled %}<span class="tag">Pabilo ON</span>{% endif %}
                 </div>
                 <span class="catalog-toggle">Editar</span>
             </div>
         </summary>
         <div class="collapsible-content">
-            <form method="post" action="/payment-methods/{{ method.id }}/update" class="form-stack">
+            <form method="post" action="/payment-methods/{{ method.id }}/update" class="form-stack" id="method-form-{{ method.id }}">
                 <div class="entity-form-grid">
                     <input name="name" type="text" value="{{ method.name }}" required>
                     <select name="currency_code" required>
@@ -63,17 +65,18 @@
                     <input name="notes" type="text" value="{{ method.notes or '' }}" placeholder="Notas">
                     <input name="display_order" type="number" min="0" value="{{ method.display_order }}" required>
                     <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"{% if method.is_default %} checked{% endif %}> Predeterminado</label>
-                </div>
-                <div class="table-actions">
-                    <button class="secondary-button" type="submit">Actualizar</button>
+                    <label class="checkbox-line"><input type="checkbox" name="pabilo_enabled" value="true"{% if method.pabilo_enabled %} checked{% endif %}> Verificar con Pabilo</label>
                 </div>
             </form>
-            <form method="post" action="/payment-methods/{{ method.id }}/toggle">
-                <button class="ghost-action" type="submit">{{ 'Desactivar' if method.is_active else 'Reactivar' }}</button>
-            </form>
-            <form method="post" action="/payment-methods/{{ method.id }}/delete">
-                <button class="ghost-action" type="submit">Eliminar</button>
-            </form>
+            <div class="table-actions">
+                <button class="secondary-button" type="submit" form="method-form-{{ method.id }}">Actualizar</button>
+                <form method="post" action="/payment-methods/{{ method.id }}/toggle">
+                    <button class="ghost-action" type="submit">{{ 'Desactivar' if method.is_active else 'Reactivar' }}</button>
+                </form>
+                <form method="post" action="/payment-methods/{{ method.id }}/delete">
+                    <button class="ghost-action" type="submit">Eliminar</button>
+                </form>
+            </div>
         </div>
     </details>
     {% endfor %}

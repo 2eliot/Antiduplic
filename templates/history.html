@@ -236,6 +236,11 @@
                                         <div class="package-editor history-edit-form">
                                             <input name="reference" type="text" value="{{ sale['reference_raw'] }}" required>
                                             <select name="package_id">
+                                                {% set ns = namespace(found=false) %}
+                                                {% for service in services %}{% for package in service.packages if package.is_active and package.id == sale['primary_package_id'] %}{% set ns.found = true %}{% endfor %}{% endfor %}
+                                                {% if sale['primary_package_id'] and not ns.found %}
+                                                <option value="{{ sale['primary_package_id'] }}" selected>{{ sale['items'][0]['service'] }} · {{ sale['items'][0]['package'] }} (inactivo)</option>
+                                                {% endif %}
                                                 {% for service in services %}
                                                 {% for package in service.packages | sort(attribute='display_order') if package.is_active %}
                                                 <option value="{{ package.id }}"{% if sale['primary_package_id'] == package.id %} selected{% endif %}>{{ service.name }} · {{ package.name }}</option>
@@ -243,6 +248,9 @@
                                                 {% endfor %}
                                             </select>
                                             <select name="payment_method_id">
+                                                {% if sale['payment_method_id'] not in payment_methods | map(attribute='id') | list %}
+                                                <option value="{{ sale['payment_method_id'] }}" selected>{{ sale['payment_method'] }} · {{ sale['payment_method_currency'] }} (inactivo)</option>
+                                                {% endif %}
                                                 {% for method in payment_methods %}
                                                 <option value="{{ method.id }}"{% if sale['payment_method_id'] == method.id %} selected{% endif %}>{{ method.name }} · {{ method.currency_code }}</option>
                                                 {% endfor %}

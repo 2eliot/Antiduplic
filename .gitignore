@@ -8,3 +8,4 @@ __pycache__/
 .env.vps
 *.pyc
 *.db
+static/uploads/

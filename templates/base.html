@@ -11,15 +11,29 @@
 </head>
 <body>
     <div class="shell{% if not current_user %} shell--auth{% endif %}">
-        {% if current_user %}
-        <aside class="sidebar" data-sidebar>
-            <div class="sidebar__top">
-                <a href="/dashboard" class="brandmark">
-                    <span>Anti</span><strong>duplic</strong>
-                </a>
-                <button class="icon-button icon-button--ghost" type="button" data-sidebar-toggle aria-label="Contraer menu">‹</button>
-            </div>
+        <main class="content{% if not current_user %} content--auth{% endif %}">
+            {% if current_user %}
+            <header class="topbar">
+                <div class="topbar__left">
+                    <button class="menu-toggle" type="button" data-menu-toggle aria-label="Abrir menú" aria-expanded="false" aria-controls="main-menu">
+                        <span></span><span></span><span></span>
+                    </button>
+                    <a href="/dashboard" class="brandmark">
+                        <span>Anti</span><strong>duplic</strong>
+                    </a>
+                </div>
+                <div class="topbar__right">
+                    <div class="topbar__status">
+                        <span class="topbar__dot"></span>
+                        <span>{{ user_card.username }}</span>
+                    </div>
+                    <div class="topbar__identity">
+                        <strong>{{ app_name }}</strong>
+                        <div class="topbar__badge">{{ user_card.days_left }}</div>
+                    </div>
+                </div>
 
+        <aside class="sidebar" id="main-menu" data-menu>
             <nav class="sidebar__nav">
                 <a href="/dashboard" class="nav-pill{% if request.url.path == '/dashboard' %} is-active{% endif %}"><span class="nav-pill__icon">◫</span><span>dashboard</span></a>
                 <a href="/profile" class="nav-pill{% if request.url.path == '/profile' %} is-active{% endif %}"><span class="nav-pill__icon">◌</span><span>Mi Perfil</span></a>
@@ -39,19 +53,6 @@
                 <button type="submit" class="logout-link"><span>↪</span><span>CERRAR SESION</span></button>
             </form>
         </aside>
-        {% endif %}
-
-        <main class="content{% if not current_user %} content--auth{% endif %}">
-            {% if current_user %}
-            <header class="topbar">
-                <div class="topbar__status">
-                    <span class="topbar__dot"></span>
-                    <span>{{ user_card.username }}</span>
-                </div>
-                <div class="topbar__identity">
-                    <strong>{{ app_name }}</strong>
-                    <div class="topbar__badge">{{ user_card.days_left }}</div>
-                </div>
             </header>
             {% endif %}
             {% block content %}{% endblock %}

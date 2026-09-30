@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<section class="workspace-title workspace-title--row">
+<section class="workspace-title workspace-title--row" data-exchange-rate="{{ '%.2f'|format(exchange_rate) }}">
     <h2>GESTIÓN DE SERVICIOS</h2>
-    <span class="soft-chip">PAQUETES USD Y BS</span>
+    <span class="soft-chip">TASA Bs {{ '%.2f'|format(exchange_rate) }}</span>
 </section>
 
 <details class="workspace-panel collapsible-panel collapsible-panel--hero form-stack"{% if page_error %} open{% endif %}>
@@ -32,7 +32,8 @@
 
 <section class="cards-grid cards-grid--mosaic cards-grid--stretch">
     {% for service in services %}
-    <details class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card">
+    <article class="workspace-panel entity-card entity-card--stack collapsible-panel collapsible-panel--card service-card-block">
+    <details class="collapsible-panel service-edit-panel" data-details-key="service-{{ service.id }}">
         <summary class="collapsible-summary collapsible-summary--card">
             <div class="catalog-card__copy">
                 <h3>{{ loop.index }}. {{ service.name }}</h3>
@@ -49,25 +50,28 @@
             </div>
         </summary>
         <div class="collapsible-content service-packages">
-            <form method="post" action="/services/{{ service.id }}/update" class="form-stack">
+            <form method="post" action="/services/{{ service.id }}/update" class="form-stack" id="service-form-{{ service.id }}">
                 <div class="entity-form-grid">
                     <input name="name" type="text" value="{{ service.name }}" required>
                     <input name="notes" type="text" value="{{ service.notes or '' }}" placeholder="Notas">
                     <input name="display_order" type="number" min="0" value="{{ service.display_order }}" required>
                     <label class="checkbox-line"><input type="checkbox" name="is_default" value="true"{% if service.is_default %} checked{% endif %}> Predeterminado</label>
                 </div>
-                <div class="table-actions">
-                    <button class="secondary-button" type="submit">Actualizar servicio</button>
-                </div>
             </form>
-            <form method="post" action="/services/{{ service.id }}/toggle">
-                <button class="ghost-action" type="submit">{{ 'Desactivar' if service.is_active else 'Reactivar' }}</button>
-            </form>
-            <form method="post" action="/services/{{ service.id }}/delete">
-                <button class="ghost-action" type="submit">Eliminar servicio</button>
-            </form>
+            <div class="table-actions">
+                <button class="secondary-button" type="submit" form="service-form-{{ service.id }}">Actualizar</button>
+                <form method="post" action="/services/{{ service.id }}/toggle">
+                    <button class="ghost-action" type="submit">{{ 'Desactivar' if service.is_active else 'Reactivar' }}</button>
+                </form>
+                <form method="post" action="/services/{{ service.id }}/delete">
+                    <button class="ghost-action" type="submit">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </details>
 
-            <details class="collapsible-subpanel">
+        <div class="service-packages-block">
+            <details class="collapsible-subpanel" data-details-key="packages-{{ service.id }}">
                 <summary class="collapsible-summary collapsible-summary--subpanel">
                     <div class="catalog-card__copy">
                         <strong>PAQUETES</strong>
@@ -78,11 +82,16 @@
                 </summary>
                 <div class="collapsible-content service-packages">
                     {% for package in service.packages | sort(attribute='display_order') %}
-                    <details class="collapsible-subcard">
+                    <details class="collapsible-subcard" data-details-key="package-{{ package.id }}" data-collapse-on-save>
                         <summary class="collapsible-summary collapsible-summary--subcard">
                             <div class="catalog-card__copy">
                                 <strong>{{ package.name }}</strong>
-                                <p class="helper-text">{{ 'Precio en Bs ' ~ ('%.2f'|format(package.bs_price)) if package.bs_price is not none else 'Precio en USD ' ~ ('%.2f'|format(package.usd_price)) }}</p>
+                                {% set price = price_map[package.id] %}
+                                {% if price.display_currency == 'BS' %}
+                                <p class="package-price"><strong>Bs {{ '%.2f'|format(price.bs) }}</strong> <span>≈ USD {{ '%.2f'|format(price.usd) }}</span></p>
+                                {% else %}
+                                <p class="package-price"><strong>USD {{ '%.2f'|format(price.usd) }}</strong> <span>≈ Bs {{ '%.2f'|format(price.bs) }}</span></p>
+                                {% endif %}
                             </div>
                             <div class="collapsible-summary__meta">
                                 <div class="tag-row">
@@ -93,27 +102,30 @@
                             </div>
                         </summary>
                         <div class="collapsible-content">
-                            <form method="post" action="/packages/{{ package.id }}/update" class="package-editor">
+                            <form method="post" action="/packages/{{ package.id }}/update" class="package-editor" id="package-form-{{ package.id }}">
                                 <input name="name" type="text" value="{{ package.name }}" required>
                                 <select name="price_currency">
                                     <option value="USD"{% if package.bs_price is none %} selected{% endif %}>USD</option>
                                     <option value="BS"{% if package.bs_price is not none %} selected{% endif %}>BS</option>
                                 </select>
-                                <input name="price_value" type="number" min="0" step="0.01" value="{{ package.bs_price if package.bs_price is not none else package.usd_price }}" required>
+                                <input name="price_value" type="number" min="0.01" step="0.01" value="{{ package.bs_price if package.bs_price is not none else package.usd_price }}" required>
                                 <input name="display_order" type="number" min="0" value="{{ package.display_order }}" required>
-                                <button class="secondary-button" type="submit">Guardar paquete</button>
+                                <small class="helper-text price-preview" data-price-preview></small>
                             </form>
-                            <form method="post" action="/packages/{{ package.id }}/toggle" class="table-actions">
-                                <button class="ghost-action" type="submit">{{ 'Desactivar' if package.is_active else 'Reactivar' }}</button>
-                            </form>
-                            <form method="post" action="/packages/{{ package.id }}/delete" class="table-actions">
-                                <button class="ghost-action" type="submit">Eliminar paquete</button>
-                            </form>
+                            <div class="table-actions">
+                                <button class="secondary-button" type="submit" form="package-form-{{ package.id }}">Guardar</button>
+                                <form method="post" action="/packages/{{ package.id }}/toggle">
+                                    <button class="ghost-action" type="submit">{{ 'Desactivar' if package.is_active else 'Reactivar' }}</button>
+                                </form>
+                                <form method="post" action="/packages/{{ package.id }}/delete">
+                                    <button class="ghost-action" type="submit">Eliminar</button>
+                                </form>
+                            </div>
                         </div>
                     </details>
                     {% endfor %}
 
-                    <details class="collapsible-subcard collapsible-subcard--new">
+                    <details class="collapsible-subcard collapsible-subcard--new" data-details-key="new-package-{{ service.id }}" data-collapse-on-save>
                         <summary class="collapsible-summary collapsible-summary--subcard">
                             <div class="catalog-card__copy">
                                 <strong>AGREGAR PAQUETE</strong>
@@ -128,8 +140,9 @@
                                     <option value="USD">USD</option>
                                     <option value="BS">BS</option>
                                 </select>
-                                <input name="price_value" type="number" min="0" step="0.01" placeholder="0.00" required>
+                                <input name="price_value" type="number" min="0.01" step="0.01" placeholder="0.00" required>
                                 <input name="display_order" type="number" min="0" value="0" required>
+                                <small class="helper-text price-preview" data-price-preview></small>
                                 <button class="primary-button primary-button--compact" type="submit">Agregar paquete</button>
                             </form>
                         </div>
@@ -137,7 +150,7 @@
                 </div>
             </details>
         </div>
-    </details>
+    </article>
     {% endfor %}
 </section>
 {% endblock %}

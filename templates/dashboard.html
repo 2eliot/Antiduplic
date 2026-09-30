@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<section class="workspace-title">
+<section class="workspace-title workspace-title--dashboard">
     <h2>dashboard</h2>
 </section>
 
@@ -34,6 +34,7 @@
                     type="button"
                     class="choice-chip choice-chip--danger{% if method.is_default %} is-selected{% endif %}"
                     data-value="{{ method.id }}"
+                    data-pabilo="{{ '1' if method.pabilo_enabled else '0' }}"
                     data-role="choice-button"
                 >{{ method.name }} · {{ method.currency_code }}</button>
                 {% else %}
@@ -45,18 +46,18 @@
 
         <div class="step-block">
             <div class="step-title"><span class="step-number">2</span><h3>Coloca numero de pago</h3></div>
-            <div class="reference-shell{% if can_verify_pabilo %} reference-shell--with-pabilo{% endif %}">
+            <div class="reference-shell" id="reference_shell">
                 <div class="reference-input-wrap">
                     <input id="reference_input" class="reference-input" type="text" placeholder="Ingresa la referencia...">
                     <button type="button" class="icon-button icon-button--clear is-hidden" id="clear_reference_button" aria-label="Limpiar referencia">×</button>
                 </div>
                 {% if can_verify_pabilo %}
-                <button type="button" class="secondary-button secondary-button--pabilo" id="verify_pabilo_button">Verificar en Pabilo</button>
+                <button type="button" class="secondary-button secondary-button--pabilo is-hidden" id="verify_pabilo_button" data-pabilo-only>Verificar en Pabilo</button>
                 {% endif %}
             </div>
             <small class="helper-text">Ultimos 6: <span data-last-six>------</span></small>
             {% if can_verify_pabilo %}
-            <small class="helper-text">La consulta usa solo la referencia. Si Pabilo devuelve un monto válido, la venta se guardará con ese monto pagado.</small>
+            <small class="helper-text is-hidden" data-pabilo-only>La consulta usa solo la referencia. Si Pabilo devuelve un monto válido, la venta se guardará con ese monto pagado.</small>
             <div id="pabilo_result_panel" class="pabilo-panel is-hidden">
                 <div class="pabilo-panel__header">
                     <strong id="pabilo_result_title">Consulta Pabilo</strong>
@@ -93,16 +94,8 @@
         <article class="workspace-panel">
             <div class="panel-heading-heavy">
                 <h3>Resumen del pedido</h3>
-                <span class="soft-chip">Tasa Bs {{ exchange_rate }}</span>
+                <button type="button" class="soft-chip rate-chip" id="open_rate_modal" aria-haspopup="dialog" title="Cambiar tasa">Tasa Bs {{ exchange_rate }} <span aria-hidden="true">✎</span></button>
             </div>
-            <form class="form-stack" method="post" action="/dashboard/exchange-rate">
-                <label for="exchange_rate_bs">Editar tasa Bs</label>
-                <div class="two-column">
-                    <input id="exchange_rate_bs" name="exchange_rate_bs" type="number" min="0.01" step="0.01" value="{{ exchange_rate }}" required>
-                    <button type="submit" class="secondary-button">Guardar tasa</button>
-                </div>
-                <small class="helper-text">Solo se actualiza tu cuenta. Las ventas nuevas usarán esta tasa y el historial conservará sus montos guardados.</small>
-            </form>
             <div id="cart_items" class="stack-list"></div>
             <div class="summary-grid summary-grid--danger">
                 <div>
@@ -119,7 +112,6 @@
         <article class="workspace-panel">
             <div class="panel-heading-heavy">
                 <h3>Registros recientes</h3>
-                <span class="soft-chip">{{ timezone_name }}</span>
             </div>
             <div class="history-stack" id="recent_sales_list">
                 {% for sale in recent_sales %}
@@ -142,6 +134,19 @@
             </div>
         </article>
     </section>
+</div>
+
+<div id="rate_modal" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="rate_modal_title">
+    <form class="rate-modal form-stack" method="post" action="/dashboard/exchange-rate">
+        <h3 id="rate_modal_title">Tasa del día</h3>
+        <p class="helper-text">Bolívares por cada dólar. Las ventas nuevas usarán esta tasa; las ya registradas no cambian.</p>
+        <label for="exchange_rate_bs">Tasa Bs</label>
+        <input id="exchange_rate_bs" name="exchange_rate_bs" type="number" min="0.01" step="0.01" value="{{ exchange_rate }}" required>
+        <div class="rate-modal__actions">
+            <button type="button" class="ghost-action" id="close_rate_modal">Cancelar</button>
+            <button type="submit" class="primary-button">Guardar tasa</button>
+        </div>
+    </form>
 </div>
 
 <div id="duplicate_modal" class="modal-backdrop is-hidden">

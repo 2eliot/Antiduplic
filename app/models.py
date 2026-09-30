@@ -53,6 +53,8 @@ class PaymentMethod(Base):
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Si está activo, el dashboard muestra "Verificar en Pabilo" al elegir este método.
+    pabilo_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
     sales: Mapped[list[Sale]] = relationship(back_populates="payment_method")
     services: Mapped[list[Service]] = relationship(back_populates="payment_method")
@@ -147,13 +149,15 @@ class Sale(Base):
     amount_paid_bs: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     expected_total_usd: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     expected_total_bs: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    # Tasa Bs/USD vigente al registrar la venta (None en ventas antiguas).
+    exchange_rate_bs: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     payment_method_id: Mapped[int] = mapped_column(ForeignKey("payment_methods.id"))
     operator_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
     payment_method: Mapped[PaymentMethod] = relationship(back_populates="sales")
     operator: Mapped[User] = relationship(back_populates="sales")
-    items: Mapped[list[SaleItem]] = relationship(back_populates="sale", cascade="all, delete-orphan")
+    items: Mapped[list[SaleItem]] = relationship(back_populates="sale", cascade="all, delete-orphan", order_by="SaleItem.id")
 
 
 class SaleItem(Base):

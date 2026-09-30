@@ -42,13 +42,25 @@ def _coerce_decimal_amount(value: Any) -> Optional[Decimal]:
         cleaned_value = cleaned_value.replace(token, "")
     cleaned_value = cleaned_value.replace(" ", "")
     filtered_value = "".join(character for character in cleaned_value if character.isdigit() or character in ",.-")
+    # Quita separadores sueltos que queden de prefijos como "Bs." o "Bs.D.".
+    filtered_value = filtered_value.strip(".,")
     if not filtered_value:
         return None
 
+    # Soporta formato venezolano (1.234,56) e internacional (1,234.56):
+    # el separador que aparece de último es el decimal; el otro es de miles.
     if "," in filtered_value and "." in filtered_value:
-        filtered_value = filtered_value.replace(",", "")
+        if filtered_value.rfind(",") > filtered_value.rfind("."):
+            filtered_value = filtered_value.replace(".", "").replace(",", ".")
+        else:
+            filtered_value = filtered_value.replace(",", "")
     elif "," in filtered_value:
-        filtered_value = filtered_value.replace(",", ".")
+        if filtered_value.count(",") > 1:
+            filtered_value = filtered_value.replace(",", "")
+        else:
+            filtered_value = filtered_value.replace(",", ".")
+    elif filtered_value.count(".") > 1:
+        filtered_value = filtered_value.replace(".", "")
 
     try:
         return Decimal(filtered_value)
